@@ -25,5 +25,5 @@ class DogfoodRunner:
         self.adapter=HttpAdapter(config.target,config.identities)
         self.runner=CampaignRunner(ResearchEngine(model,self.adapter))
     def run(self)->CampaignOutcome:
-        experiments=self.runner.engine.plan_authorization_frontier()
-        return self.runner.run(experiments)
+        planned=self.runner.engine.plan_research()
+        return self.runner.run(tuple(x.experiment for x in planned))
