@@ -47,3 +47,4 @@ __all__=[
 from .dogfood import DogfoodConfig,DogfoodRunner
 from .review import HumanReview,finalize_finding
 from .checkpoint import CampaignCheckpoint
+from .live_config import LiveDogfoodConfig
