@@ -9,6 +9,11 @@ class OwnershipClaim:
     identity_id: str
     observation_id: str
     rationale: str
+    control_kind: str = "creation"
+
+    def __post_init__(self):
+        if self.control_kind not in {"creation", "write"}:
+            raise ValueError("ownership control evidence must be creation or write")
 
 def resolve_ownership(model: TargetModel, claims: tuple[OwnershipClaim, ...]) -> TargetModel:
     """Apply explicit, observed ownership claims; never infer ownership from field names."""
@@ -43,7 +48,11 @@ def claim_from_experiment(model: TargetModel, experiment: OwnershipExperiment, o
         raise ValueError("ownership evidence requires a successful response")
     if not response_contains_marker(response_body, resource.identifier):
         raise ValueError("ownership evidence requires the exact resource marker")
-    return OwnershipClaim(resource.id, experiment.identity_id, observation.id, "successful ownership experiment response contained the exact modeled resource identifier")
+    # A read observation establishes access, not control. This helper therefore
+    # cannot establish ownership from an ordinary GET experiment.
+    if not any(token in experiment.hypothesis.lower() for token in ("create", "write", "control")):
+        raise ValueError("ordinary read evidence does not establish exclusive ownership")
+    return OwnershipClaim(resource.id, experiment.identity_id, observation.id, "explicit control experiment established the modeled resource", "write")
 
 
 def resolve_experiment_ownership(model: TargetModel, experiment: OwnershipExperiment, observation: Observation, response_body: str) -> TargetModel:
