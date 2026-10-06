@@ -30,9 +30,10 @@ from .request_model import ParameterLocation,Parameter,RequestTemplate
 from .response_model import SemanticResponse,summarize
 from .artifact import campaign_artifact,dumps_artifact
 from .redaction import redact
+from .ownership import OwnershipClaim,resolve_ownership
 
 __all__=[
-"Endpoint","Identity","Observation","Resource","TargetModel","HttpAdapter","TargetConfig",
+"OwnershipClaim","resolve_ownership","Endpoint","Identity","Observation","Resource","TargetModel","HttpAdapter","TargetConfig",
 "DifferentialExperiment","DifferentialPlanner","StateTransition","WorkflowExperiment","WorkflowPlanner",
 "RequestExperiment","RequestDifferentialPlanner","RequestVariant","Evidence","EvidenceKind",
 "classify_differential","response_contains_marker","ImpactAssessment","ImpactClass","assess",
