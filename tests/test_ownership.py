@@ -36,7 +36,7 @@ def _observation(m, identity="alice", status=200, oid="evidence-1"):
 
 def test_experiment_evidence_can_establish_ownership():
     m=_base_model(); e=_experiment(m); o=_observation(m)
-    claim=claim_from_experiment(m,e,o,'{"id":"123"}')
+    claim=claim_from_experiment(m,e,o,'{"id":"123"}', control_kind='creation')
     assert claim.resource_id=="r1" and claim.identity_id=="alice"
 
 def test_two_hundred_alone_does_not_establish_ownership():
@@ -50,7 +50,7 @@ def test_two_hundred_alone_does_not_establish_ownership():
 
 def test_experiment_resolution_updates_model():
     m=_base_model(); e=_experiment(m); o=_observation(m)
-    resolve_experiment_ownership(m,e,o,'{"id":"123"}')
+    resolve_experiment_ownership(m,e,o,'{"id":"123"}', control_kind='creation')
     assert m.resources["r1"].owner_id=="alice"
 
 def test_wrong_identity_cannot_establish_ownership():
