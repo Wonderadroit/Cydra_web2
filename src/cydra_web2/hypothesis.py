@@ -8,6 +8,7 @@ class HypothesisKind(str, Enum):
     REQUEST_VARIANT="request_variant"
     WORKFLOW="workflow"
     STATE_BOUNDARY="state_boundary"
+    OWNERSHIP="ownership"
 
 @dataclass(frozen=True)
 class Hypothesis:
@@ -35,6 +36,13 @@ class ResearchFrontier:
 class HypothesisPlanner:
     def build(self, model: TargetModel) -> ResearchFrontier:
         f=ResearchFrontier()
+        for r in sorted(model.resources.values(), key=lambda x: x.id):
+            if r.owner_id is None:
+                f.add(Hypothesis(
+                    id=f"ownership:{r.id}",
+                    kind=HypothesisKind.OWNERSHIP,
+                    claim=f"ownership of {r.id} is unresolved and must be established from target evidence before authorization testing",
+                    resource_ids=(r.id,), expected_boundary="resource ownership"))
         for owner,other,r,e in model.authorization_candidates():
             f.add(Hypothesis(
                 id=f"auth:{r.id}:{e.id}:{owner.id}:{other.id}",
