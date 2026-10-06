@@ -1,5 +1,5 @@
 from cydra_web2.model import Identity, Resource, Endpoint, Observation, TargetModel
-from cydra_web2.ownership import OwnershipClaim, resolve_ownership
+from cydra_web2.ownership import OwnershipClaim, resolve_ownership, claim_from_experiment, resolve_experiment_ownership
 
 def test_ownership_requires_observed_identity():
     m=TargetModel("https://authorized.example")
