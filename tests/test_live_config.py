@@ -1,0 +1,15 @@
+import pytest
+from cydra_web2.live_config import LiveDogfoodConfig
+
+def test_live_config_requires_target(monkeypatch):
+    monkeypatch.delenv("CYDRA_TARGET_URL",raising=False)
+    monkeypatch.setenv("CYDRA_IDENTITIES","alice=secret")
+    with pytest.raises(ValueError,match="CYDRA_TARGET_URL"):
+        LiveDogfoodConfig.from_environment()
+
+def test_live_config_parses_identities_without_logging_credentials(monkeypatch):
+    monkeypatch.setenv("CYDRA_TARGET_URL","https://authorized.example")
+    monkeypatch.setenv("CYDRA_IDENTITIES","alice=secret-token;bob=other-token")
+    cfg=LiveDogfoodConfig.from_environment()
+    assert [x.identity_id for x in cfg.identities]==["alice","bob"]
+    assert cfg.target.base_url=="https://authorized.example"
