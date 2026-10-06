@@ -5,7 +5,7 @@ from .evidence import Evidence,EvidenceKind,classify_differential
 from .model import TargetModel
 from .provenance import EvidenceLedger
 from .verification import verify_replay
-from .hypothesis import HypothesisPlanner
+from .hypothesis import HypothesisPlanner, HypothesisKind
 from .research_plan import PlannedExperiment
 
 @dataclass(frozen=True)
@@ -27,6 +27,7 @@ class ResearchEngine:
         return self.planner.plan_authorization(self.model)
 
     def plan_research(self):
+        """Build executable research only from established relationships; unresolved ownership stays non-executable."""
         hypotheses=self.hypothesis_planner.build(self.model)
         experiments=self.planner.plan_authorization(self.model)
         planned=[]

@@ -11,6 +11,9 @@ class BoundaryCell:
     relation: str
 
 class AuthorizationMatrix:
+    def unresolved_resources(self, model: TargetModel):
+        return tuple(r for r in sorted(model.resources.values(), key=lambda x: x.id) if r.owner_id is None)
+
     def build(self, model: TargetModel):
         cells=[]
         for r in sorted(model.resources.values(),key=lambda x:x.id):
