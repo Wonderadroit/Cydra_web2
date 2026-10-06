@@ -14,7 +14,9 @@ class TargetConfig:
     def from_url(cls,base_url:str,*,extra_hosts:set[str]|None=None):
         p=urllib.parse.urlparse(base_url)
         if p.scheme not in {"http","https"} or not p.hostname: raise ValueError("base_url must be an absolute HTTP(S) URL")
-        hosts={p.hostname}\n        for host in extra_hosts or set(): hosts.add(host.lower().strip())\n        return cls(base_url.rstrip("/"),frozenset(hosts))
+        hosts={p.hostname}
+        for host in extra_hosts or set(): hosts.add(host.lower().strip())
+        return cls(base_url.rstrip("/"),frozenset(hosts))
 
 @dataclass(frozen=True)
 class HttpResponse:
