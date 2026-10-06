@@ -1,0 +1,51 @@
+name: Web2 live dogfood
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_url:
+        description: "Explicitly authorized target base URL"
+        required: true
+        type: string
+      discovery_seeds:
+        description: "Comma-separated in-scope seed paths"
+        required: false
+        default: "/"
+        type: string
+      max_paths:
+        description: "Maximum paths per identity"
+        required: false
+        default: "50"
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  live-dogfood:
+    runs-on: ubuntu-latest
+    environment: live-dogfood
+    env:
+      CYDRA_TARGET_URL: ${{ inputs.target_url }}
+      CYDRA_DISCOVERY_SEEDS: ${{ inputs.discovery_seeds }}
+      CYDRA_MAX_PATHS: ${{ inputs.max_paths }}
+      CYDRA_SHARED_HEADERS: ${{ secrets.CYDRA_SHARED_HEADERS }}
+      CYDRA_IDENTITY_HEADERS: ${{ secrets.CYDRA_IDENTITY_HEADERS }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: pip install -e .
+      - name: Run live dogfood
+        run: python scripts/live_dogfood.py
+      - name: Upload redacted artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cydra-web2-live-dogfood
+          path: artifacts/live-dogfood.json
+          if-no-files-found: warn
