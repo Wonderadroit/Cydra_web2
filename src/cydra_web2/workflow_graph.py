@@ -12,6 +12,8 @@ class Transition:
     requires:tuple[str,...]=()
     produces:tuple[str,...]=()
     identity_id:str|None=None
+    method:str="GET"
+    path:str=""
 
 @dataclass
 class WorkflowGraph:
@@ -29,6 +31,9 @@ class WorkflowGraph:
                     walk(nf,path+(t,),[x for x in remaining if x!=t])
         walk(set(self.facts),(),list(self.transitions))
         return tuple(paths)
+
+    def control_transitions(self,identity_id):
+        return tuple(t for t in self.transitions if t.identity_id==identity_id and t.method.upper() in {"POST","PUT","PATCH","DELETE"} and t.produces)
 
     def find_identity_mismatches(self):
         groups={}
