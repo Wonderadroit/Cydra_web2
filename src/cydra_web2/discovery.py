@@ -4,7 +4,7 @@ import hashlib,json,re
 from html.parser import HTMLParser
 from typing import Iterable
 from .adapter import HttpAdapter
-from .model import Endpoint,Identity,Observation,Resource,TargetModel
+from .model import Endpoint,Observation,Resource,TargetModel
 
 @dataclass(frozen=True)
 class DiscoveryResult:
@@ -26,8 +26,8 @@ def _documents(body:str):
     docs=[]
     try: docs.append(json.loads(body))
     except (TypeError,json.JSONDecodeError): pass
-    for attrs,source in re.findall(r"<script\\b([^>]*)>(.*?)</script\\s*>",body,re.I|re.S):
-        if re.search(r'type\\s*=\\s*["\\\']application/json["\\\']',attrs,re.I):
+    for attrs,source in re.findall(r"<script\b([^>]*)>(.*?)</script\s*>",body,re.I|re.S):
+        if re.search(r'type\s*=\s*["\']application/json["\']',attrs,re.I):
             try: docs.append(json.loads(source))
             except (TypeError,json.JSONDecodeError): pass
     return docs
@@ -49,8 +49,7 @@ def discover(adapter:HttpAdapter,model:TargetModel,seeds:Iterable[str]=("/",),ma
         if path in seen: continue
         seen.add(path)
         endpoint_id=f"GET {path}"
-        if endpoint_id not in model.endpoints:
-            model.add_endpoint(Endpoint(endpoint_id,"GET",path))
+        if endpoint_id not in model.endpoints: model.add_endpoint(Endpoint(endpoint_id,"GET",path))
         response=adapter.request(method="GET",path=path)
         fp=hashlib.sha256(response.body.encode()).hexdigest()
         obs=Observation(f"obs:{len(observations)}",endpoint_id,response.identity_id,response.status_code,fp,len(response.body),f"GET:{path}")
