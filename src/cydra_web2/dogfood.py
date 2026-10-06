@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from .adapter import HttpAdapter,TargetConfig,IdentitySession
 from .campaign_runner import CampaignOutcome,CampaignRunner
 from .model import TargetModel
+from .engine import ResearchEngine
 
 @dataclass(frozen=True)
 class DogfoodConfig:
@@ -22,7 +23,7 @@ class DogfoodRunner:
         self.model=model
         self.config=config
         self.adapter=HttpAdapter(config.target,config.identities)
-        self.runner=CampaignRunner(__import__("cydra_web2.engine",fromlist=["ResearchEngine"]).ResearchEngine(model,self.adapter))
+        self.runner=CampaignRunner(ResearchEngine(model,self.adapter))
     def run(self)->CampaignOutcome:
         experiments=self.runner.engine.plan_authorization_frontier()
         return self.runner.run(experiments)
