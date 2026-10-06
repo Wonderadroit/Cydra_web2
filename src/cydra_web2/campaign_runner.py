@@ -5,7 +5,6 @@ from .engine import ResearchEngine
 from .experiment_state import ExperimentState, ExperimentStage, advance
 from .observation import observation_from_response
 from .differential import OwnershipExperiment
-from .ownership import resolve_experiment_ownership
 from .verification import verify_replay
 
 @dataclass(frozen=True)
@@ -59,12 +58,10 @@ class CampaignRunner:
             observation = self._ownership_observation(experiment, response)
             self.engine.model.add_observation(observation)
             state = advance(state, ExperimentStage.OBSERVED, "ownership response recorded as attributable observation")
-            try:
-                resolve_experiment_ownership(self.engine.model, experiment, observation, response.body)
-            except ValueError:
-                states.append(advance(state, ExperimentStage.REJECTED, "response did not establish ownership; model remains unresolved"))
-                continue
-            ownership_resolved += 1
+            # A successful read is an observation, not proof of exclusive ownership.
+            # Keep the ownership frontier unresolved until a stronger control/creation
+            # provenance claim is supplied. This prevents public/shared objects from
+            # becoming false authorization baselines.
             states.append(state)
 
         if executed >= self.max_experiments:
