@@ -42,7 +42,7 @@ def _ids(value,path=""):
     elif isinstance(value,list):
         for i,v in enumerate(value): yield from _ids(v,f"{path}[{i}]")
 
-def discover(adapter:HttpAdapter,model:TargetModel,seeds:Iterable[str]=(\"/\",),max_paths:int=50,identity_id:str|None=None)->DiscoveryResult:
+def discover(adapter:HttpAdapter,model:TargetModel,seeds:Iterable[str]=("/",),max_paths:int=50,identity_id:str|None=None)->DiscoveryResult:
     queue=list(dict.fromkeys(seeds)); seen=set(); observations=[]; resource_ids=[]
     while queue and len(seen)<max_paths:
         path=queue.pop(0)
