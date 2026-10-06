@@ -29,6 +29,7 @@ class ResearchEngine:
     def plan_research(self):
         """Build executable research only from established relationships; unresolved ownership stays non-executable."""
         hypotheses=self.hypothesis_planner.build(self.model)
+        hypotheses.hypotheses = list(hypotheses.prioritized())
         experiments=self.planner.plan_authorization(self.model)
         planned=[]
         for h in hypotheses.hypotheses:
