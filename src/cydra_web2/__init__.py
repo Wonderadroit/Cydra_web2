@@ -43,3 +43,6 @@ __all__=[
 "RequestVariantPlanner","SequenceAction","SequencePlan","SequencePlanner","VerificationResult","verify_replay",
 "StateFingerprint","fingerprint","compare_state","BoundaryAssessment","assess_boundary","CampaignOutcome","CampaignRunner",
 "ParameterLocation","Parameter","RequestTemplate","SemanticResponse","summarize","campaign_artifact","dumps_artifact"]
+
+from .dogfood import DogfoodConfig,DogfoodRunner
+from .review import HumanReview,finalize_finding

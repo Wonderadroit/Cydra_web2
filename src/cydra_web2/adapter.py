@@ -2,6 +2,9 @@ from dataclasses import dataclass,field
 import hashlib,json,urllib.error,urllib.parse,urllib.request
 from http.cookiejar import CookieJar
 from typing import Any,Mapping
+from .scope import check_scope
+from .session import IdentityBinding,SessionRegistry
+
 @dataclass(frozen=True)
 class TargetConfig:
     base_url:str
@@ -12,6 +15,7 @@ class TargetConfig:
         p=urllib.parse.urlparse(base_url)
         if p.scheme not in {"http","https"} or not p.hostname: raise ValueError("base_url must be an absolute HTTP(S) URL")
         return cls(base_url.rstrip("/"),frozenset({p.hostname}|(extra_hosts or set())))
+
 @dataclass(frozen=True)
 class HttpResponse:
     url:str
@@ -22,21 +26,32 @@ class HttpResponse:
     headers:Mapping[str,str]
     body:str
     body_sha256:str
+
 @dataclass(frozen=True)
 class IdentitySession:
     identity_id:str
     headers:Mapping[str,str]=field(default_factory=dict)
+
 class HttpAdapter:
-    def __init__(self,target:TargetConfig,identities:tuple[IdentitySession,...]=()):
-        self.target=target; self.identities={x.identity_id:x for x in identities}; self._jars={}
+    """Scoped HTTP executor. Live execution is HTTPS-only and identity-bound."""
+    def __init__(self,target:TargetConfig,identities:tuple[IdentitySession,...]=(),*,session_registry:SessionRegistry|None=None):
+        self.target=target
+        bindings=tuple(IdentityBinding(x.identity_id,x.headers) for x in identities)
+        self.registry=session_registry or SessionRegistry(bindings)
+        self._jars={}
     def request(self,*,method:str,path:str,identity_id:str|None=None,headers:Mapping[str,str]|None=None,body:Any=None):
+        if identity_id is not None:
+            binding=self.registry.get(identity_id)
+        elif self.registry.ids():
+            raise PermissionError("anonymous execution is disabled when explicit identities are configured")
         url=urllib.parse.urljoin(self.target.base_url+"/",path.lstrip("/"))
-        if urllib.parse.urlparse(url).hostname not in self.target.allowed_hosts: raise PermissionError("request host is outside the target allowlist")
-        session=self.identities.get(identity_id) if identity_id else None
+        decision=check_scope(url,self.target.allowed_hosts,("https",))
+        if not decision.allowed:
+            raise PermissionError(decision.reason)
         jar=self._jars.setdefault(identity_id or "__anonymous__",CookieJar())
         opener=urllib.request.build_opener(urllib.request.HTTPCookieProcessor(jar))
         merged={"User-Agent":"CYDRA-Web2/0.1"}
-        if session: merged.update(session.headers)
+        if identity_id is not None: merged.update(binding.headers)
         merged.update(headers or {})
         payload=None
         if body is not None:
@@ -52,4 +67,5 @@ class HttpAdapter:
         self._validate_final_host(final)
         return HttpResponse(url,final,method.upper(),identity_id,status,rh,raw.decode("utf-8",errors="replace"),hashlib.sha256(raw).hexdigest())
     def _validate_final_host(self,url):
-        if urllib.parse.urlparse(url).hostname not in self.target.allowed_hosts: raise PermissionError("redirect escaped the target allowlist")
+        decision=check_scope(url,self.target.allowed_hosts,("https",))
+        if not decision.allowed: raise PermissionError(f"redirect escaped scope: {decision.reason}")
