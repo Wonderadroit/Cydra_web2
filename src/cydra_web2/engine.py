@@ -16,7 +16,9 @@ class ResearchEngine:
     def execute(self,experiment):
         owner=self.adapter.request(method=experiment.owner.method,path=experiment.owner.path,identity_id=experiment.owner.identity_id)
         comparison=self.adapter.request(method=experiment.comparison.method,path=experiment.comparison.path,identity_id=experiment.comparison.identity_id)
-        return ExperimentResult(experiment,owner,comparison,classify_differential(experiment,owner,comparison))
+        resource=self.model.resources.get(experiment.resource_id)
+        marker=resource.identifier if resource else None
+        return ExperimentResult(experiment,owner,comparison,classify_differential(experiment,owner,comparison,marker))
     def replay(self,experiment,runs=2):
         if runs<2: raise ValueError("causal replay requires at least two runs")
         return tuple(self.execute(experiment) for _ in range(runs))

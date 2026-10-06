@@ -1,30 +1,37 @@
 # Web2 architecture
 
-## Why this repository is separate
+## Security-research objective
 
-The Web2 system has a different optimization target from the Solidity system. We do not want capability repair to become the measure of progress. This repository therefore owns the Web2 research loop.
+The system is optimized for discovering reproducible security boundary violations, not for maximizing scan coverage or passing internal benchmarks.
 
-## Reused principles
+## Research graph
 
-- explicit target scope and allowlisting
-- provenance for observed data
-- fail-closed execution
-- differential experiments
-- causal replay
-- evidence before findings
+Target -> observations -> behavior model -> identities/resources/endpoints -> security boundary -> hypothesis -> differential experiment -> execution -> evidence -> replay -> impact -> report.
 
-## Intentionally not ported
+## Experiment families
 
-The Solidity research controller, benchmark families, contract materialization, compiler/Foundry logic, and its capability-repair loop are not dependencies here.
+1. **Identity differentials** — owner vs non-owner, role A vs role B, authenticated vs anonymous.
+2. **Object differentials** — substitute identifiers while holding the request constant.
+3. **Request differentials** — method, parameter, header, and body changes.
+4. **Workflow differentials** — perform the same state transition under different identities or states.
+5. **State-transition reasoning** — compare preconditions and postconditions rather than treating endpoints as isolated calls.
 
-## Current graph
+## Evidence rules
 
-Target -> observed responses -> behavior model -> security boundary -> differential experiment -> evidence -> replay -> impact gate.
+A successful HTTP status alone is never a finding. Strong authorization evidence requires either:
+- identical successful owner/comparison response fingerprints, or
+- a successful comparison response containing the modeled protected-resource identifier.
 
-## First milestone
+Server errors and transport failures are anomalies/capability failures, never security evidence.
 
-Build a reliable identity/resource/endpoint differential engine before adding broad vulnerability families. A resource identifier can be observed, but ownership is never inferred merely because a field is named id/user_id/uuid. Ownership must enter the model from explicit operator/application evidence.
+A candidate must survive independent replay before it can pass the causal gate. Impact is assessed separately from exploitability.
+
+## Reuse from Cydra_wonder
+
+We retain useful principles: provenance, explicit models, fail-closed execution, differential testing, causal verification, and evidence-first reasoning.
+
+We do **not** depend on the Solidity controller, compiler/Foundry stack, synthetic maturity loop, or Web2 capability-repair loop.
 
 ## Success criterion
 
-The first real success is not a green test suite. It is a deterministic, reproducible security contradiction on an authorized target that survives replay and can be converted into a report with evidence.
+A green regression validates the engine. The actual end state is a reproducible contradiction on an authorized target that survives replay and can be turned into a report with concrete impact.
