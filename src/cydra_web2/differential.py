@@ -14,6 +14,7 @@ class OwnershipExperiment:
     endpoint_id: str
     path: str
     resource_id: str
+    method: str = "GET"
 
 @dataclass(frozen=True)
 class DifferentialExperiment:
