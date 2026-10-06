@@ -14,4 +14,8 @@ from .workflow_graph import StateFact,Transition,WorkflowGraph
 from .provenance import EvidenceRecord,EvidenceLedger
 from .schema import SchemaEndpoint,parse_openapi,extract_frontend_routes
 from .safety import ScopePolicy,ScopeGuard
+from .invariants import Invariant,InvariantKind,InvariantViolation,authorization_invariants
+from .experiment_queue import QueuedExperiment,ExperimentQueue
+from .cache_diff import CacheObservation,CacheDifferential,compare_cache
+from .integration import ResearchPlan,CampaignPlanner
 __all__=["Endpoint","Identity","Observation","Resource","TargetModel","HttpAdapter","TargetConfig","DifferentialExperiment","DifferentialPlanner","StateTransition","WorkflowExperiment","WorkflowPlanner","RequestExperiment","RequestDifferentialPlanner","RequestVariant","Evidence","EvidenceKind","classify_differential","response_contains_marker","ImpactAssessment","ImpactClass","assess","Finding","build_finding","ResearchEngine","Hypothesis","HypothesisKind","HypothesisPlanner","ResearchFrontier","NormalizedResponse","normalize_body","normalize_response","semantic_fingerprint","AuthorizationMatrix","BoundaryCell","StateFact","Transition","WorkflowGraph","EvidenceRecord","EvidenceLedger","SchemaEndpoint","parse_openapi","extract_frontend_routes","ScopePolicy","ScopeGuard"]
