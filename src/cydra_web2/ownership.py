@@ -18,11 +18,11 @@ def resolve_ownership(model: TargetModel, claims: tuple[OwnershipClaim, ...]) ->
             raise ValueError("ownership claim references unknown resource")
         if claim.identity_id not in updated.identities:
             raise ValueError("ownership claim references unknown identity")
-        if not any(o.id == claim.observation_id and o.identity_id == claim.identity_id for o in updated.observations):
-            raise ValueError("ownership claim requires an observation by the claimed owner")
         current = updated.resources[claim.resource_id]
         if current.owner_id is not None and current.owner_id != claim.identity_id:
             raise ValueError("conflicting ownership claim")
+        if not any(o.id == claim.observation_id and o.identity_id == claim.identity_id for o in updated.observations):
+            raise ValueError("ownership claim requires an observation by the claimed owner")
         updated.resources[claim.resource_id] = Resource(current.id, current.label, claim.identity_id, current.identifier, current.source_observation)
     return updated
 
