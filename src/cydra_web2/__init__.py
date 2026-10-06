@@ -18,4 +18,8 @@ from .invariants import Invariant,InvariantKind,InvariantViolation,authorization
 from .experiment_queue import QueuedExperiment,ExperimentQueue
 from .cache_diff import CacheObservation,CacheDifferential,compare_cache
 from .integration import ResearchPlan,CampaignPlanner
+from .campaign import CampaignStep,Campaign,CampaignBuilder
+from .request_matrix import RequestVariant as MatrixRequestVariant,VariantPair,RequestVariantPlanner
+from .sequence import SequenceAction,SequencePlan,SequencePlanner
+from .verification import VerificationResult,verify_replay
 __all__=["Endpoint","Identity","Observation","Resource","TargetModel","HttpAdapter","TargetConfig","DifferentialExperiment","DifferentialPlanner","StateTransition","WorkflowExperiment","WorkflowPlanner","RequestExperiment","RequestDifferentialPlanner","RequestVariant","Evidence","EvidenceKind","classify_differential","response_contains_marker","ImpactAssessment","ImpactClass","assess","Finding","build_finding","ResearchEngine","Hypothesis","HypothesisKind","HypothesisPlanner","ResearchFrontier","NormalizedResponse","normalize_body","normalize_response","semantic_fingerprint","AuthorizationMatrix","BoundaryCell","StateFact","Transition","WorkflowGraph","EvidenceRecord","EvidenceLedger","SchemaEndpoint","parse_openapi","extract_frontend_routes","ScopePolicy","ScopeGuard"]
