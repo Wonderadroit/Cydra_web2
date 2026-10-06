@@ -28,6 +28,7 @@ from .campaign_runner import CampaignOutcome,CampaignRunner
 from .request_model import ParameterLocation,Parameter,RequestTemplate
 from .response_model import SemanticResponse,summarize
 from .artifact import campaign_artifact,dumps_artifact
+from .redaction import redact
 
 __all__=[
 "Endpoint","Identity","Observation","Resource","TargetModel","HttpAdapter","TargetConfig",
@@ -42,7 +43,7 @@ __all__=[
 "ResearchPlan","CampaignPlanner","CampaignStep","Campaign","CampaignBuilder","MatrixRequestVariant","VariantPair",
 "RequestVariantPlanner","SequenceAction","SequencePlan","SequencePlanner","VerificationResult","verify_replay",
 "StateFingerprint","fingerprint","compare_state","BoundaryAssessment","assess_boundary","CampaignOutcome","CampaignRunner",
-"ParameterLocation","Parameter","RequestTemplate","SemanticResponse","summarize","campaign_artifact","dumps_artifact","DogfoodConfig","DogfoodRunner","HumanReview","finalize_finding","CampaignCheckpoint"]
+"ParameterLocation","Parameter","RequestTemplate","SemanticResponse","summarize","campaign_artifact","dumps_artifact","redact","DogfoodConfig","DogfoodRunner","HumanReview","finalize_finding","CampaignCheckpoint"]
 
 from .dogfood import DogfoodConfig,DogfoodRunner
 from .review import HumanReview,finalize_finding
