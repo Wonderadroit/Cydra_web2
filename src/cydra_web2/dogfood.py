@@ -20,6 +20,10 @@ class DogfoodRunner:
         ids=[x.identity_id for x in config.identities]
         if len(ids)!=len(set(ids)):
             raise ValueError("identity bindings must be unique")
+        required={x.identity_id for x in model.identities.values() if x.authenticated}
+        missing=required-set(ids)
+        if missing:
+            raise ValueError(f"missing identity bindings: {sorted(missing)}")
         self.model=model
         self.config=config
         self.adapter=HttpAdapter(config.target,config.identities)
