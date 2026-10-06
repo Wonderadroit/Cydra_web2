@@ -30,3 +30,14 @@ def establish_control(model:TargetModel, transition:Transition, observation:Obse
     if resource_id not in transition.produces:
         raise ValueError("transition does not causally produce the modeled resource")
     return ControlProvenance(observation.identity_id,transition.id,resource_id,observation.id,control_kind,"write transition produced the modeled resource and returned its exact identifier")
+
+def apply_control_ownership(model:TargetModel, provenance:ControlProvenance):
+    if provenance.identity_id not in model.identities:
+        raise ValueError("control provenance references unknown identity")
+    resource=model.resources.get(provenance.resource_id)
+    if resource is None:
+        raise ValueError("control provenance references unknown resource")
+    if resource.owner_id is not None and resource.owner_id != provenance.identity_id:
+        raise ValueError("conflicting ownership control")
+    model.resources[resource.id]=type(resource)(resource.id,resource.label,provenance.identity_id,resource.identifier,provenance.observation_id)
+    return model
