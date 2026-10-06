@@ -12,7 +12,7 @@ class ControlledOwnershipTarget:
         )
 
 
-def test_campaign_resolves_ownership_then_rebuilds_authorization_frontier():
+def test_campaign_does_not_promote_observation_to_ownership():
     model = TargetModel("https://controlled.authorized")
     model.add_identity(Identity("alice", "owner", True))
     model.add_identity(Identity("bob", "comparison", True))
