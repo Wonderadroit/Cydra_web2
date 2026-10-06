@@ -53,7 +53,9 @@ def resolve_experiment_ownership(model: TargetModel, experiment: OwnershipExperi
     return resolve_ownership(model, (claim,))
 
 
-def claim_from_experiment(model, experiment, observation, response_body):
+
+def claim_from_experiment(model: TargetModel, experiment: OwnershipExperiment, observation: Observation, response_body: str) -> OwnershipClaim:
+    """Create a claim only from attributable, successful target evidence."""
     if observation.identity_id != experiment.identity_id:
         raise ValueError("ownership evidence must come from the experiment identity")
     if observation.endpoint_id != experiment.endpoint_id:
@@ -69,6 +71,7 @@ def claim_from_experiment(model, experiment, observation, response_body):
         raise ValueError("ownership evidence requires the exact resource marker")
     return OwnershipClaim(resource.id, experiment.identity_id, observation.id, "successful ownership experiment response contained the exact modeled resource identifier")
 
-def resolve_experiment_ownership(model, experiment, observation, response_body):
+
+def resolve_experiment_ownership(model: TargetModel, experiment: OwnershipExperiment, observation: Observation, response_body: str) -> TargetModel:
     claim = claim_from_experiment(model, experiment, observation, response_body)
     return resolve_ownership(model, (claim,))
