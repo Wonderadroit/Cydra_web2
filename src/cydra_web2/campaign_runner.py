@@ -50,7 +50,11 @@ class CampaignRunner:
             executed += 1
             state = ExperimentState(experiment.id, ExperimentStage.PLANNED, "ownership prerequisite selected from frontier")
             state = advance(state, ExperimentStage.VALIDATED, "identity, endpoint, identifier and scope are modelled")
-            endpoint = self.engine.model.endpoints.get(experiment.endpoint_id)\n            if endpoint is None:\n                states.append(advance(state, ExperimentStage.REJECTED, "ownership endpoint disappeared from model"))\n                continue\n            response = self.engine.adapter.request(method=endpoint.method, path=experiment.path, identity_id=experiment.identity_id)
+            endpoint = self.engine.model.endpoints.get(experiment.endpoint_id)
+            if endpoint is None:
+                states.append(advance(state, ExperimentStage.REJECTED, "ownership endpoint disappeared from model"))
+                continue
+            response = self.engine.adapter.request(method=endpoint.method, path=experiment.path, identity_id=experiment.identity_id)
             state = advance(state, ExperimentStage.EXECUTED, "ownership request completed")
             observation = self._ownership_observation(experiment, response)
             self.engine.model.add_observation(observation)
