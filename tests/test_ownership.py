@@ -66,7 +66,7 @@ def test_wrong_identity_cannot_establish_ownership():
 
 def test_conflicting_owner_fails_closed():
     m=_base_model(); e=_experiment(m); o=_observation(m)
-    resolve_experiment_ownership(m,e,o,'{"id":"123"}')
+    resolve_experiment_ownership(m,e,o,'{"id":"123"}', control_kind='creation')
     try:
         resolve_ownership(m,(OwnershipClaim("r1","bob","evidence-1","conflict"),))
     except ValueError as exc:
