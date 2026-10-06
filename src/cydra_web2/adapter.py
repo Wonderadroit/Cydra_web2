@@ -39,6 +39,9 @@ class HttpAdapter:
         bindings=tuple(IdentityBinding(x.identity_id,x.headers) for x in identities)
         self.registry=session_registry or SessionRegistry(bindings)
         self._jars={}
+    @property
+    def identities(self):
+        return {identity_id: self.registry.get(identity_id) for identity_id in self.registry.ids()}
     def request(self,*,method:str,path:str,identity_id:str|None=None,headers:Mapping[str,str]|None=None,body:Any=None):
         if identity_id is not None:
             binding=self.registry.get(identity_id)
