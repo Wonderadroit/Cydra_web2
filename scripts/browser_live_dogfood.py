@@ -30,6 +30,11 @@ def _states():
     return out
 
 
+def _cookie_applies(domain, allowed_hosts):
+    domain=domain.lstrip(".").lower()
+    return any(host == domain or host.endswith("." + domain) for host in allowed_hosts)
+
+
 def main():
     config=LiveDogfoodConfig.from_environment()
     states=_states()
@@ -44,15 +49,29 @@ def main():
             context=browser.new_context(storage_state=states[identity.identity_id])
             page=context.new_page()
             network=[]
-            page.on("response", lambda response: network.append({
-                "url": response.url, "status": response.status,
-                "method": response.request.method,
-            }) if response.url.startswith(config.target.base_url) else None)
+            auth_headers={}
+            def on_request(request):
+                if not request.url.startswith(config.target.base_url):
+                    return
+                network.append({
+                    "url": request.url,
+                    "method": request.method,
+                })
+                for name,value in request.headers.items():
+                    lname=name.lower()
+                    if lname == "authorization" or lname.startswith("x-"):
+                        auth_headers.setdefault(name,value)
+            page.on("request", on_request)
             page.goto(config.target.base_url, wait_until="domcontentloaded")
             page.wait_for_timeout(1000)
             cookies=context.cookies()
-            cookie_header="; ".join(f"{c['name']}={c['value']}" for c in cookies if c["domain"].lstrip(".") in config.target.allowed_hosts)
-            headers=dict(identity.headers)
+            cookie_header="; ".join(
+                f"{c['name']}={c['value']}"
+                for c in cookies
+                if _cookie_applies(c["domain"], config.target.allowed_hosts)
+            )
+            headers=dict(auth_headers)
+            headers.update(identity.headers)
             if cookie_header:
                 headers["Cookie"]=cookie_header
             identities.append(IdentitySession(identity.identity_id,headers))
@@ -62,6 +81,7 @@ def main():
                 "title":page.title(),
                 "network_requests":[x for x in network if x["method"] in {"GET","POST","PUT","PATCH","DELETE"}][:200],
                 "cookie_count":len(cookies),
+                "browser_auth_header_names":sorted(auth_headers),
             })
             context.close()
         browser.close()
