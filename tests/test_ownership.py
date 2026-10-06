@@ -15,3 +15,59 @@ def test_unknown_owner_cannot_be_guessed():
     try: resolve_ownership(m,(OwnershipClaim("r1","alice","missing","guess"),))
     except ValueError as e: assert "observation" in str(e)
     else: raise AssertionError("ownership must fail closed")
+
+from cydra_web2.differential import DifferentialPlanner
+
+def _base_model():
+    m=TargetModel("https://authorized.example")
+    m.add_identity(Identity("alice","user",True))
+    m.add_identity(Identity("bob","user",True))
+    m.add_resource(Resource("r1","profile",None,"123"))
+    m.add_endpoint(Endpoint("GET /profiles/{id}","GET","/profiles/{id}",("r1",)))
+    return m
+
+def _experiment(m):
+    return DifferentialPlanner().plan_ownership(m)[0]
+
+def _observation(m, identity="alice", status=200, oid="evidence-1"):
+    o=Observation(oid,"GET /profiles/{id}",identity,status,"a"*64,20,"req")
+    m.add_observation(o)
+    return o
+
+def test_experiment_evidence_can_establish_ownership():
+    m=_base_model(); e=_experiment(m); o=_observation(m)
+    claim=claim_from_experiment(m,e,o,'{"id":"123"}')
+    assert claim.resource_id=="r1" and claim.identity_id=="alice"
+
+def test_two_hundred_alone_does_not_establish_ownership():
+    m=_base_model(); e=_experiment(m); o=_observation(m)
+    try:
+        claim_from_experiment(m,e,o,'{"id":"999"}')
+    except ValueError as exc:
+        assert "resource marker" in str(exc)
+    else:
+        raise AssertionError("2xx alone must not establish ownership")
+
+def test_experiment_resolution_updates_model():
+    m=_base_model(); e=_experiment(m); o=_observation(m)
+    resolve_experiment_ownership(m,e,o,'{"id":"123"}')
+    assert m.resources["r1"].owner_id=="alice"
+
+def test_wrong_identity_cannot_establish_ownership():
+    m=_base_model(); e=_experiment(m); o=_observation(m,identity="bob")
+    try:
+        claim_from_experiment(m,e,o,'{"id":"123"}')
+    except ValueError as exc:
+        assert "experiment identity" in str(exc)
+    else:
+        raise AssertionError("ownership evidence must be attributable")
+
+def test_conflicting_owner_fails_closed():
+    m=_base_model(); e=_experiment(m); o=_observation(m)
+    resolve_experiment_ownership(m,e,o,'{"id":"123"}')
+    try:
+        resolve_ownership(m,(OwnershipClaim("r1","bob","evidence-1","conflict"),))
+    except ValueError as exc:
+        assert "conflicting" in str(exc)
+    else:
+        raise AssertionError("conflicting ownership must fail closed")
