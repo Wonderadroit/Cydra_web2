@@ -83,3 +83,9 @@ def test_read_evidence_is_not_control_provenance():
         assert "exclusive ownership" in str(exc)
     else:
         raise AssertionError("read evidence must not establish exclusive ownership")
+
+
+def test_ownership_experiment_preserves_endpoint_method():
+    m=_base_model()
+    e=DifferentialPlanner().plan_ownership(m)[0]
+    assert e.method=="GET"
