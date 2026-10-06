@@ -12,7 +12,7 @@ class ControlledOwnershipTarget:
         )
 
 
-def test_campaign_resolves_ownership_then_rebuilds_authorization_frontier():
+def test_campaign_does_not_promote_observation_to_ownership():
     model = TargetModel("https://controlled.authorized")
     model.add_identity(Identity("alice", "owner", True))
     model.add_identity(Identity("bob", "comparison", True))
@@ -20,7 +20,7 @@ def test_campaign_resolves_ownership_then_rebuilds_authorization_frontier():
     model.add_endpoint(Endpoint("records", "GET", "/records/{id}", ("record-1",), "read"))
     engine = ResearchEngine(model, ControlledOwnershipTarget())
     outcome = CampaignRunner(engine).run_research()
-    assert outcome.ownership_resolved == 1
-    assert model.resources["record-1"].owner_id == "alice"
-    assert any(s.experiment_id.startswith("auth:") for s in outcome.states)
+    assert outcome.ownership_resolved == 0
+    assert model.resources["record-1"].owner_id is None
+    assert not any(s.experiment_id.startswith("auth:") for s in outcome.states)
     assert any(s.experiment_id.startswith("ownership:") for s in outcome.states)
