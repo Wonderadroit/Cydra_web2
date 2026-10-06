@@ -23,6 +23,9 @@ class Hypothesis:
 @dataclass
 class ResearchFrontier:
     hypotheses: list[Hypothesis]=field(default_factory=list)
+    def prioritized(self):
+        rank={HypothesisKind.AUTHORIZATION:0,HypothesisKind.OBJECT_SUBSTITUTION:1,HypothesisKind.REQUEST_VARIANT:2,HypothesisKind.WORKFLOW:3,HypothesisKind.STATE_BOUNDARY:4,HypothesisKind.OWNERSHIP:5}
+        return tuple(sorted(self.hypotheses,key=lambda h:(rank.get(h.kind,99),h.id)))
     explored: set[str]=field(default_factory=set)
     def add(self,h):
         if h.id not in {x.id for x in self.hypotheses}: self.hypotheses.append(h)
