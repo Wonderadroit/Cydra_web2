@@ -36,7 +36,10 @@ class LiveDogfoodConfig:
                 headers["Authorization"]=token
                 identities.append(IdentitySession(identity,headers))
         if not identities:
-            raise ValueError("CYDRA_IDENTITIES or CYDRA_IDENTITY_HEADERS must contain at least one explicit identity")
+            for identity in cls._browser_identity_ids_from_environment():
+                identities.append(IdentitySession(identity,dict(shared_headers)))
+        if not identities:
+            raise ValueError("CYDRA_IDENTITIES, CYDRA_IDENTITY_HEADERS, or CYDRA_BROWSER_STORAGE_STATES must contain at least one explicit identity")
         return cls(TargetConfig.from_url(base,extra_hosts=extra),tuple(identities))
 
     @staticmethod
@@ -69,6 +72,24 @@ class LiveDogfoodConfig:
                 raise ValueError("CYDRA_IDENTITY_HEADERS must map identity IDs to header objects")
             out[identity.strip()]=cls._validate_headers(headers,"CYDRA_IDENTITY_HEADERS")
         return out
+
+    @staticmethod
+    def _browser_identity_ids_from_environment():
+        raw=os.environ.get("CYDRA_BROWSER_STORAGE_STATES","").strip()
+        if not raw:
+            return ()
+        try:
+            parsed=json.loads(raw)
+        except json.JSONDecodeError as exc:
+            raise ValueError("CYDRA_BROWSER_STORAGE_STATES must be a JSON object") from exc
+        if not isinstance(parsed,dict):
+            raise ValueError("CYDRA_BROWSER_STORAGE_STATES must be a JSON object")
+        identities=[]
+        for identity in parsed:
+            if not isinstance(identity,str) or not identity.strip():
+                raise ValueError("CYDRA_BROWSER_STORAGE_STATES must map non-empty identity IDs to storage states")
+            identities.append(identity.strip())
+        return tuple(identities)
 
     @staticmethod
     def _validate_headers(headers,name):

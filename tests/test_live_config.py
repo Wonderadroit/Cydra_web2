@@ -48,3 +48,17 @@ def test_live_config_rejects_non_object_shared_headers(monkeypatch):
     monkeypatch.setenv("CYDRA_IDENTITIES","alice=secret-token")
     with pytest.raises(ValueError,match="JSON object"):
         LiveDogfoodConfig.from_environment()
+
+
+def test_live_config_uses_browser_storage_identity_ids(monkeypatch):
+    monkeypatch.setenv("CYDRA_TARGET_URL","https://authorized.example")
+    monkeypatch.setenv("CYDRA_SHARED_HEADERS",'{"X-Bug-Bounty":"Bugcrowd-cyberwonder"}')
+    monkeypatch.setenv("CYDRA_BROWSER_STORAGE_STATES",'{"alice":"base64-state","bob":"base64-state"}')
+    monkeypatch.delenv("CYDRA_IDENTITIES",raising=False)
+    monkeypatch.delenv("CYDRA_IDENTITY_HEADERS",raising=False)
+    cfg=LiveDogfoodConfig.from_environment()
+    assert [x.identity_id for x in cfg.identities]==["alice","bob"]
+    assert [dict(x.headers) for x in cfg.identities]==[
+        {"X-Bug-Bounty":"Bugcrowd-cyberwonder"},
+        {"X-Bug-Bounty":"Bugcrowd-cyberwonder"},
+    ]
