@@ -42,7 +42,8 @@ __all__=[
 "ResearchPlan","CampaignPlanner","CampaignStep","Campaign","CampaignBuilder","MatrixRequestVariant","VariantPair",
 "RequestVariantPlanner","SequenceAction","SequencePlan","SequencePlanner","VerificationResult","verify_replay",
 "StateFingerprint","fingerprint","compare_state","BoundaryAssessment","assess_boundary","CampaignOutcome","CampaignRunner",
-"ParameterLocation","Parameter","RequestTemplate","SemanticResponse","summarize","campaign_artifact","dumps_artifact"]
+"ParameterLocation","Parameter","RequestTemplate","SemanticResponse","summarize","campaign_artifact","dumps_artifact","DogfoodConfig","DogfoodRunner","HumanReview","finalize_finding","CampaignCheckpoint"]
 
 from .dogfood import DogfoodConfig,DogfoodRunner
 from .review import HumanReview,finalize_finding
+from .checkpoint import CampaignCheckpoint
