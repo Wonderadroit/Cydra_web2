@@ -42,7 +42,7 @@ def _ids(value,path=""):
     elif isinstance(value,list):
         for i,v in enumerate(value): yield from _ids(v,f"{path}[{i}]")
 
-def discover(adapter:HttpAdapter,model:TargetModel,seeds:Iterable[str]=("/",),max_paths:int=50)->DiscoveryResult:
+def discover(adapter:HttpAdapter,model:TargetModel,seeds:Iterable[str]=("/",),max_paths:int=50,identity_id:str|None=None)->DiscoveryResult:
     queue=list(dict.fromkeys(seeds)); seen=set(); observations=[]; resource_ids=[]
     while queue and len(seen)<max_paths:
         path=queue.pop(0)
@@ -50,7 +50,7 @@ def discover(adapter:HttpAdapter,model:TargetModel,seeds:Iterable[str]=("/",),ma
         seen.add(path)
         endpoint_id=f"GET {path}"
         if endpoint_id not in model.endpoints: model.add_endpoint(Endpoint(endpoint_id,"GET",path))
-        response=adapter.request(method="GET",path=path)
+        response=adapter.request(method="GET",path=path,identity_id=identity_id)
         fp=hashlib.sha256(response.body.encode()).hexdigest()
         obs=Observation(f"obs:{len(observations)}",endpoint_id,response.identity_id,response.status_code,fp,len(response.body),f"GET:{path}")
         model.add_observation(obs); observations.append(obs)
@@ -58,6 +58,9 @@ def discover(adapter:HttpAdapter,model:TargetModel,seeds:Iterable[str]=("/",),ma
             rid="resource:"+hashlib.sha256((key+"|"+identifier).encode()).hexdigest()[:16]
             if rid not in model.resources:
                 model.add_resource(Resource(rid,key,None,identifier,obs.id)); resource_ids.append(rid)
+            endpoint=model.endpoints[endpoint_id]
+            if rid not in endpoint.resource_ids:
+                model.endpoints[endpoint_id]=Endpoint(endpoint.id,endpoint.method,endpoint.path,tuple(sorted(set(endpoint.resource_ids)|{rid})),endpoint.action)
         parser=_Links(); parser.feed(response.body)
         for link in sorted(parser.links):
             if link.startswith("/") and link not in seen and link not in queue: queue.append(link)
