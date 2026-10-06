@@ -7,6 +7,15 @@ class DifferentialAction:
     method:str
     path:str
 @dataclass(frozen=True)
+class OwnershipExperiment:
+    id: str
+    hypothesis: str
+    identity_id: str
+    endpoint_id: str
+    path: str
+    resource_id: str
+
+@dataclass(frozen=True)
 class DifferentialExperiment:
     id:str
     hypothesis:str
@@ -16,6 +25,20 @@ class DifferentialExperiment:
     endpoint_id:str
 class DifferentialPlanner:
     _PARAM=re.compile(r"{([A-Za-z_][A-Za-z0-9_-]*)}|:([A-Za-z_][A-Za-z0-9_-]*)")
+    def plan_ownership(self,model:TargetModel):
+        out=[]
+        for resource in sorted(model.resources.values(),key=lambda x:x.id):
+            if resource.owner_id is not None: continue
+            if resource.identifier is None: continue
+            for identity in sorted(model.identities.values(),key=lambda x:x.id):
+                if not identity.authenticated: continue
+                for endpoint in sorted(model.endpoints.values(),key=lambda x:x.id):
+                    if resource.id not in endpoint.resource_ids: continue
+                    path=self._materialize(endpoint,resource)
+                    if path is not None:
+                        out.append(OwnershipExperiment(f"ownership:{resource.id}:{endpoint.id}:{identity.id}",f"{identity.id} may establish observed control of {resource.id} through {endpoint.id}",identity.id,endpoint.id,path,resource.id))
+        return tuple(out)
+
     def plan_authorization(self,model:TargetModel):
         out=[]
         for owner,other,resource,endpoint in model.authorization_candidates():

@@ -1,6 +1,6 @@
 from .model import Endpoint,Identity,Observation,Resource,TargetModel
 from .adapter import HttpAdapter,TargetConfig
-from .differential import DifferentialExperiment,DifferentialPlanner
+from .differential import DifferentialExperiment,DifferentialPlanner,OwnershipExperiment
 from .workflow import StateTransition,WorkflowExperiment,WorkflowPlanner
 from .request_diff import RequestExperiment,RequestDifferentialPlanner,RequestVariant
 from .evidence import Evidence,EvidenceKind,classify_differential,response_contains_marker
@@ -34,7 +34,7 @@ from .ownership import OwnershipClaim,resolve_ownership
 
 __all__=[
 "OwnershipClaim","resolve_ownership","Endpoint","Identity","Observation","Resource","TargetModel","HttpAdapter","TargetConfig",
-"DifferentialExperiment","DifferentialPlanner","StateTransition","WorkflowExperiment","WorkflowPlanner",
+"DifferentialExperiment","DifferentialPlanner","OwnershipExperiment","StateTransition","WorkflowExperiment","WorkflowPlanner",
 "RequestExperiment","RequestDifferentialPlanner","RequestVariant","Evidence","EvidenceKind",
 "classify_differential","response_contains_marker","ImpactAssessment","ImpactClass","assess",
 "Finding","build_finding","ResearchEngine","Hypothesis","HypothesisKind","HypothesisPlanner","ResearchFrontier",
