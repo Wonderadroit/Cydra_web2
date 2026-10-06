@@ -13,6 +13,7 @@ from .matrix import AuthorizationMatrix,BoundaryCell
 from .workflow_graph import StateFact,Transition,WorkflowGraph
 from .provenance import EvidenceRecord,EvidenceLedger
 from .schema import SchemaEndpoint,parse_openapi,extract_frontend_routes
+from .ingestion import ModelIngestionResult,ingest_schema,ingest_discovery
 from .safety import ScopePolicy,ScopeGuard
 from .invariants import Invariant,InvariantKind,InvariantViolation,authorization_invariants
 from .experiment_queue import QueuedExperiment,ExperimentQueue
@@ -40,7 +41,7 @@ __all__=[
 "StateFact","Transition","WorkflowGraph","EvidenceRecord","EvidenceLedger","SchemaEndpoint","parse_openapi",
 "extract_frontend_routes","ScopePolicy","ScopeGuard","Invariant","InvariantKind","InvariantViolation",
 "authorization_invariants","QueuedExperiment","ExperimentQueue","CacheObservation","CacheDifferential","compare_cache",
-"ResearchPlan","CampaignPlanner","CampaignStep","Campaign","CampaignBuilder","MatrixRequestVariant","VariantPair",
+"ResearchPlan","CampaignPlanner","ModelIngestionResult","ingest_schema","ingest_discovery","CampaignStep","Campaign","CampaignBuilder","MatrixRequestVariant","VariantPair",
 "RequestVariantPlanner","SequenceAction","SequencePlan","SequencePlanner","VerificationResult","verify_replay",
 "StateFingerprint","fingerprint","compare_state","BoundaryAssessment","assess_boundary","CampaignOutcome","CampaignRunner",
 "ParameterLocation","Parameter","RequestTemplate","SemanticResponse","summarize","campaign_artifact","dumps_artifact","redact","DogfoodConfig","DogfoodRunner","HumanReview","finalize_finding","CampaignCheckpoint"]
