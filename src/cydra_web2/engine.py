@@ -5,6 +5,8 @@ from .evidence import Evidence,EvidenceKind,classify_differential
 from .model import TargetModel
 from .provenance import EvidenceLedger
 from .verification import verify_replay
+from .hypothesis import HypothesisPlanner
+from .research_plan import PlannedExperiment
 
 @dataclass(frozen=True)
 class ExperimentResult:
@@ -18,10 +20,21 @@ class ResearchEngine:
         self.model=model
         self.adapter=adapter
         self.planner=DifferentialPlanner()
+        self.hypothesis_planner=HypothesisPlanner()
         self.ledger=EvidenceLedger()
 
     def plan_authorization_frontier(self):
         return self.planner.plan_authorization(self.model)
+
+    def plan_research(self):
+        hypotheses=self.hypothesis_planner.build(self.model)
+        experiments=self.planner.plan_authorization(self.model)
+        planned=[]
+        for h in hypotheses.hypotheses:
+            for experiment in experiments:
+                if experiment.resource_id in h.resource_ids and experiment.endpoint_id in h.endpoint_ids and experiment.owner.identity_id in h.identity_ids and experiment.comparison.identity_id in h.identity_ids:
+                    planned.append(PlannedExperiment(h,experiment))
+        return tuple(planned)
 
     def execute(self,experiment):
         owner=self.adapter.request(method=experiment.owner.method,path=experiment.owner.path,identity_id=experiment.owner.identity_id)
