@@ -14,6 +14,7 @@ class OwnershipExperiment:
     endpoint_id: str
     path: str
     resource_id: str
+    method: str = "GET"
 
 @dataclass(frozen=True)
 class DifferentialExperiment:
@@ -36,7 +37,7 @@ class DifferentialPlanner:
                     if resource.id not in endpoint.resource_ids: continue
                     path=self._materialize(endpoint,resource)
                     if path is not None:
-                        out.append(OwnershipExperiment(f"ownership:{resource.id}:{endpoint.id}:{identity.id}",f"{identity.id} may establish observed control of {resource.id} through {endpoint.id}",identity.id,endpoint.id,path,resource.id))
+                        out.append(OwnershipExperiment(f"ownership:{resource.id}:{endpoint.id}:{identity.id}",f"{identity.id} may establish observed control of {resource.id} through {endpoint.id}",identity.id,endpoint.id,path,resource.id,endpoint.method))
         return tuple(out)
 
     def plan_authorization(self,model:TargetModel):

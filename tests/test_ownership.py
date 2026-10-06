@@ -27,7 +27,9 @@ def _base_model():
     return m
 
 def _experiment(m):
-    return DifferentialPlanner().plan_ownership(m)[0]
+    e=DifferentialPlanner().plan_ownership(m)[0]
+    from cydra_web2.differential import OwnershipExperiment
+    return OwnershipExperiment(e.id,e.hypothesis,e.identity_id,e.endpoint_id,e.path,e.resource_id,"POST")
 
 def _observation(m, identity="alice", status=200, oid="evidence-1"):
     o=Observation(oid,"GET /profiles/{id}",identity,status,"a"*64,20,"req")
@@ -36,7 +38,7 @@ def _observation(m, identity="alice", status=200, oid="evidence-1"):
 
 def test_experiment_evidence_can_establish_ownership():
     m=_base_model(); e=_experiment(m); o=_observation(m)
-    claim=claim_from_experiment(m,e,o,'{"id":"123"}')
+    claim=claim_from_experiment(m,e,o,'{"id":"123"}', control_kind='creation')
     assert claim.resource_id=="r1" and claim.identity_id=="alice"
 
 def test_two_hundred_alone_does_not_establish_ownership():
@@ -50,7 +52,7 @@ def test_two_hundred_alone_does_not_establish_ownership():
 
 def test_experiment_resolution_updates_model():
     m=_base_model(); e=_experiment(m); o=_observation(m)
-    resolve_experiment_ownership(m,e,o,'{"id":"123"}')
+    resolve_experiment_ownership(m,e,o,'{"id":"123"}', control_kind='creation')
     assert m.resources["r1"].owner_id=="alice"
 
 def test_wrong_identity_cannot_establish_ownership():
@@ -64,10 +66,26 @@ def test_wrong_identity_cannot_establish_ownership():
 
 def test_conflicting_owner_fails_closed():
     m=_base_model(); e=_experiment(m); o=_observation(m)
-    resolve_experiment_ownership(m,e,o,'{"id":"123"}')
+    resolve_experiment_ownership(m,e,o,'{"id":"123"}', control_kind='creation')
     try:
         resolve_ownership(m,(OwnershipClaim("r1","bob","evidence-1","conflict"),))
     except ValueError as exc:
         assert "conflicting" in str(exc)
     else:
         raise AssertionError("conflicting ownership must fail closed")
+
+
+def test_read_evidence_is_not_control_provenance():
+    m=_base_model(); e=_experiment(m); o=_observation(m)
+    try:
+        claim_from_experiment(m,e,o,'{"id":"123"}')
+    except ValueError as exc:
+        assert "exclusive ownership" in str(exc)
+    else:
+        raise AssertionError("read evidence must not establish exclusive ownership")
+
+
+def test_ownership_experiment_preserves_endpoint_method():
+    m=_base_model()
+    e=DifferentialPlanner().plan_ownership(m)[0]
+    assert e.method=="GET"
