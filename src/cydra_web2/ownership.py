@@ -33,7 +33,7 @@ def resolve_ownership(model: TargetModel, claims: tuple[OwnershipClaim, ...]) ->
 
 
 
-def claim_from_experiment(model: TargetModel, experiment: OwnershipExperiment, observation: Observation, response_body: str) -> OwnershipClaim:
+def claim_from_experiment(model: TargetModel, experiment: OwnershipExperiment, observation: Observation, response_body: str, control_kind: str = "read") -> OwnershipClaim:
     """Create a claim only from attributable, successful target evidence."""
     if observation.identity_id != experiment.identity_id:
         raise ValueError("ownership evidence must come from the experiment identity")
@@ -48,13 +48,12 @@ def claim_from_experiment(model: TargetModel, experiment: OwnershipExperiment, o
         raise ValueError("ownership evidence requires a successful response")
     if not response_contains_marker(response_body, resource.identifier):
         raise ValueError("ownership evidence requires the exact resource marker")
-    # A read observation establishes access, not control. This helper therefore
-    # cannot establish ownership from an ordinary GET experiment.
-    if not any(token in experiment.hypothesis.lower() for token in ("create", "write", "control")):
+    # A read observation establishes access, not control.
+    if control_kind not in {"creation", "write"}:
         raise ValueError("ordinary read evidence does not establish exclusive ownership")
-    return OwnershipClaim(resource.id, experiment.identity_id, observation.id, "explicit control experiment established the modeled resource", "write")
+    return OwnershipClaim(resource.id, experiment.identity_id, observation.id, "explicit control experiment established the modeled resource", control_kind)
 
 
-def resolve_experiment_ownership(model: TargetModel, experiment: OwnershipExperiment, observation: Observation, response_body: str) -> TargetModel:
-    claim = claim_from_experiment(model, experiment, observation, response_body)
+def resolve_experiment_ownership(model: TargetModel, experiment: OwnershipExperiment, observation: Observation, response_body: str, control_kind: str = "read") -> TargetModel:
+    claim = claim_from_experiment(model, experiment, observation, response_body, control_kind)
     return resolve_ownership(model, (claim,))
