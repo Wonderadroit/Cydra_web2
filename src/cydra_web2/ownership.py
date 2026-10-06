@@ -51,6 +51,8 @@ def claim_from_experiment(model: TargetModel, experiment: OwnershipExperiment, o
     # A read observation establishes access, not control.
     if control_kind not in {"creation", "write"}:
         raise ValueError("ordinary read evidence does not establish exclusive ownership")
+    if experiment.method.upper() == "GET":
+        raise ValueError("GET evidence cannot establish exclusive ownership")
     return OwnershipClaim(resource.id, experiment.identity_id, observation.id, "explicit control experiment established the modeled resource", control_kind)
 
 
