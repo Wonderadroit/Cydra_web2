@@ -71,3 +71,13 @@ def test_conflicting_owner_fails_closed():
         assert "conflicting" in str(exc)
     else:
         raise AssertionError("conflicting ownership must fail closed")
+
+
+def test_read_evidence_is_not_control_provenance():
+    m=_base_model(); e=_experiment(m); o=_observation(m)
+    try:
+        claim_from_experiment(m,e,o,'{"id":"123"}')
+    except ValueError as exc:
+        assert "exclusive ownership" in str(exc)
+    else:
+        raise AssertionError("read evidence must not establish exclusive ownership")
