@@ -27,7 +27,9 @@ def _base_model():
     return m
 
 def _experiment(m):
-    return DifferentialPlanner().plan_ownership(m)[0]
+    e=DifferentialPlanner().plan_ownership(m)[0]
+    from cydra_web2.differential import OwnershipExperiment
+    return OwnershipExperiment(e.id,e.hypothesis,e.identity_id,e.endpoint_id,e.path,e.resource_id,"POST")
 
 def _observation(m, identity="alice", status=200, oid="evidence-1"):
     o=Observation(oid,"GET /profiles/{id}",identity,status,"a"*64,20,"req")
