@@ -14,7 +14,6 @@ def test_live_config_parses_identities_without_logging_credentials(monkeypatch):
     assert [x.identity_id for x in cfg.identities]==["alice","bob"]
     assert cfg.target.base_url=="https://authorized.example"
 
-
 def test_live_config_parses_generic_shared_headers(monkeypatch):
     monkeypatch.setenv("CYDRA_TARGET_URL","https://authorized.example")
     monkeypatch.setenv("CYDRA_SHARED_HEADERS",'{"X-Bug-Bounty":"Bugcrowd-cyberwonder","Accept":"application/json"}')
@@ -25,6 +24,23 @@ def test_live_config_parses_generic_shared_headers(monkeypatch):
         "Accept":"application/json",
         "Authorization":"secret-token",
     }
+
+def test_live_config_accepts_identity_specific_generic_headers_without_authorization(monkeypatch):
+    monkeypatch.setenv("CYDRA_TARGET_URL","https://authorized.example")
+    monkeypatch.setenv("CYDRA_SHARED_HEADERS",'{"X-Bug-Bounty":"Bugcrowd-cyberwonder"}')
+    monkeypatch.setenv("CYDRA_IDENTITY_HEADERS",'{"google":{"Cookie":"session=operator-supplied"}}')
+    cfg=LiveDogfoodConfig.from_environment()
+    assert [x.identity_id for x in cfg.identities]==["google"]
+    assert dict(cfg.identities[0].headers)=={
+        "X-Bug-Bounty":"Bugcrowd-cyberwonder",
+        "Cookie":"session=operator-supplied",
+    }
+
+def test_live_config_rejects_invalid_identity_header_map(monkeypatch):
+    monkeypatch.setenv("CYDRA_TARGET_URL","https://authorized.example")
+    monkeypatch.setenv("CYDRA_IDENTITY_HEADERS",'{"google":["bad"]}')
+    with pytest.raises(ValueError,match="header objects"):
+        LiveDogfoodConfig.from_environment()
 
 def test_live_config_rejects_non_object_shared_headers(monkeypatch):
     monkeypatch.setenv("CYDRA_TARGET_URL","https://authorized.example")
