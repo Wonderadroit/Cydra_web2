@@ -1,5 +1,6 @@
 from dataclasses import asdict
 import json
+from .redaction import redact
 
 def campaign_artifact(*,target,model,hypotheses,experiments,evidence,replays,assessment=None):
     return {
@@ -13,4 +14,4 @@ def campaign_artifact(*,target,model,hypotheses,experiments,evidence,replays,ass
     }
 
 def dumps_artifact(data)->str:
-    return json.dumps(data,sort_keys=True,indent=2,default=str)
+    return json.dumps(redact(data),sort_keys=True,indent=2,default=str)
