@@ -22,6 +22,14 @@ class _Links(HTMLParser):
 
 _ID=re.compile(r"^(?:id|uuid|[A-Za-z][A-Za-z0-9]*(?:_id|_uuid|Id|UUID))$",re.I)
 
+def _api_paths(body:str):
+    out=set()
+    for token in body.replace(chr(39),chr(34)).split(chr(34)):
+        token=token.strip()
+        if token.startswith("/api/") or token.startswith("/graphql") or token.startswith("/v1/") or token.startswith("/v2/") or token.startswith("/v3/"):
+            out.add(token.split("?")[0])
+    return out
+
 def _documents(body:str):
     docs=[]
     try: docs.append(json.loads(body))
@@ -54,6 +62,9 @@ def discover(adapter:HttpAdapter,model:TargetModel,seeds:Iterable[str]=("/",),ma
         fp=hashlib.sha256(response.body.encode()).hexdigest()
         obs=Observation(f"obs:{len(observations)}",endpoint_id,response.identity_id,response.status_code,fp,len(response.body),f"GET:{path}")
         model.add_observation(obs); observations.append(obs)
+        for candidate in sorted(_api_paths(response.body)):
+            if candidate not in seen and candidate not in queue:
+                queue.append(candidate)
         for key,identifier,field_path in _ids(_documents(response.body)):
             rid="resource:"+hashlib.sha256((key+"|"+identifier).encode()).hexdigest()[:16]
             if rid not in model.resources:
