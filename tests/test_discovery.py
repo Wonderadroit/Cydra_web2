@@ -36,3 +36,36 @@ def test_api_paths_are_extracted_from_public_javascript():
     from cydra_web2.discovery import _api_paths
     body='const a="/api/users/123"; const b="/graphql"; const c="/v2/inventory";'
     assert _api_paths(body) == {"/api/users/123", "/graphql", "/v2/inventory"}
+
+def test_js_reconstruction_resolves_fetch_axios_and_xhr():
+    from cydra_web2.discovery import _analyze_bundle
+    a = _analyze_bundle(
+        "/app.js",
+        'const API_BASE = "/api"; const users = API_BASE + "/users"; fetch(users); axios.post(API_BASE + "/session"); const xhr = new XMLHttpRequest(); xhr.open("GET", API_BASE + "/profile");',
+        "https://authorized.example",
+    )
+    assert ("GET", "/api/users") in a.endpoints
+    assert ("POST", "/api/session") in a.endpoints
+    assert ("GET", "/api/profile") in a.endpoints
+
+def test_js_reconstruction_records_external_origin_without_executing_it():
+    from cydra_web2.discovery import _analyze_bundle
+    a = _analyze_bundle("/app.js", 'fetch("https://api.example.net/v1/profile");', "https://authorized.example")
+    assert ("https://api.example.net/v1/profile", "https://api.example.net") in a.request_origins
+    assert all(path != "https://api.example.net/v1/profile" for _, path in a.endpoints)
+
+def test_discovery_analyzes_js_and_models_static_methods():
+    from types import SimpleNamespace
+    from cydra_web2.discovery import discover
+    class Adapter:
+        def request(self, *, method, path, identity_id=None):
+            return SimpleNamespace(
+                identity_id=identity_id, status_code=200,
+                body='fetch("/v1/items"); axios.post("/v1/session");',
+                body_sha256="a"*64, headers={"Content-Type":"application/javascript"},
+            )
+    m=TargetModel("https://authorized.example")
+    result=discover(Adapter(),m,seeds=("/app.js",),max_paths=1,max_js_bundles=1)
+    assert ("GET","/v1/items") in {(e.method,e.path) for e in m.endpoints.values()}
+    assert ("POST","/v1/session") in {(e.method,e.path) for e in m.endpoints.values()}
+    assert result.bundle_analyses[0].request_origins[0][1] == "https://authorized.example"
