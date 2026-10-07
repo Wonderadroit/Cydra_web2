@@ -68,7 +68,7 @@ jobs:
       - name: Download latest encrypted state for each identity
         env:
           GH_TOKEN: ${{ github.token }}
-          IDENTITIES: ${{ inputs.identities }}
+          IDENTITIES: ${{ inputs.identities || 'aurory-a,aurory-b' }}
         run: |
           rm -rf artifacts/auth-state
           mkdir -p artifacts/auth-state
