@@ -157,19 +157,39 @@ def _bootstrap() -> None:
         except subprocess.TimeoutExpired:
             chrome.kill()
 
-    # Phase 2: after the user/browser is finished, attach Playwright only to
-    # the already-authenticated local profile and export encrypted state.
+    # Phase 2: verify the resulting browser state before exporting it.
     with sync_playwright() as p:
-        context = p.chromium.launch_persistent_context(
-            str(profile_dir),
-            headless=True,
-        )
+        context = p.chromium.launch_persistent_context(str(profile_dir), headless=True, viewport={"width": 1440, "height": 900})
         if header_value:
             context.set_extra_http_headers({header_name: header_value})
+        page = context.pages[0] if context.pages else context.new_page()
+        page.goto(target, wait_until="domcontentloaded")
+        cookies = context.cookies()
+        names = sorted({x["name"] for x in cookies})
+        auth_names = [n for n in names if any(k in n.lower() for k in ("auth", "session", "sess", "token", "sid", "jwt", "user"))]
+        try:
+            storage = page.evaluate("() => ({local:Object.keys(localStorage),session:Object.keys(sessionStorage)})")
+            storage_keys = sorted(set(storage["local"] + storage["session"]))
+        except Exception:
+            storage_keys = []
+        auth_storage = [n for n in storage_keys if any(k in n.lower() for k in ("auth", "session", "sess", "token", "sid", "jwt", "user", "account"))]
+        try:
+            body = page.locator("body").inner_text(timeout=3000).lower()
+        except Exception:
+            body = ""
+        signed_in_ui = any(k in body for k in ("sign out", "log out", "logout", "disconnect", "my account"))
+        confirmed = bool(auth_names or auth_storage or signed_in_ui)
+        print("AUTHENTICATION EVIDENCE: " + json.dumps({"confirmed": confirmed, "url": page.url, "title": page.title(), "auth_cookie_names": auth_names, "auth_storage_keys": auth_storage, "signed_in_ui": signed_in_ui}, sort_keys=True))
+        if not confirmed:
+            context.close()
+            raise RuntimeError("AUTHENTICATION_NOT_CONFIRMED: no authenticated session evidence was detected; encrypted state was not created")
         context.storage_state(path=state, indexed_db=True)
         context.close()
 
+    encrypt_state(state, bundle)
+    state.unlink()
     subprocess.run(["rm", "-rf", str(profile_dir)], check=True)
+    print(f"Encrypted authentication state created for identity '{identity}'.")
 
 
 
