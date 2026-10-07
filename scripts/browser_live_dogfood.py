@@ -63,7 +63,22 @@ def main():
                         auth_headers.setdefault(name,value)
             page.on("request", on_request)
             page.goto(config.target.base_url, wait_until="domcontentloaded")
-            page.wait_for_timeout(1000)
+            page.wait_for_timeout(2000)
+            observed_paths={"/"}
+            target_host=__import__("urllib.parse",fromlist=["urlparse"]).urlparse(config.target.base_url).hostname
+            for item in network:
+                parsed=__import__("urllib.parse",fromlist=["urlparse"]).urlparse(item["url"])
+                if parsed.hostname==target_host:
+                    observed_paths.add(parsed.path or "/")
+            browser_observations.append({
+                "identity":identity.identity_id,
+                "final_url":page.url,
+                "title":page.title(),
+                "network_requests":[x for x in network if x["method"] in {"GET","POST","PUT","PATCH","DELETE"}][:200],
+                "observed_paths":sorted(observed_paths)[:250],
+                "cookie_count":len(context.cookies()),
+                "browser_auth_header_names":sorted(auth_headers),
+            })
             cookies=context.cookies()
             cookie_header="; ".join(
                 f"{c['name']}={c['value']}"
@@ -75,14 +90,6 @@ def main():
             if cookie_header:
                 headers["Cookie"]=cookie_header
             identities.append(IdentitySession(identity.identity_id,headers))
-            browser_observations.append({
-                "identity":identity.identity_id,
-                "final_url":page.url,
-                "title":page.title(),
-                "network_requests":[x for x in network if x["method"] in {"GET","POST","PUT","PATCH","DELETE"}][:200],
-                "cookie_count":len(cookies),
-                "browser_auth_header_names":sorted(auth_headers),
-            })
             context.close()
         browser.close()
 
@@ -91,10 +98,12 @@ def main():
     model=TargetModel(config.target.base_url)
     for x in identities:
         model.add_identity(Identity(x.identity_id,x.identity_id,True))
-    seeds=tuple(x.strip() for x in os.environ.get("CYDRA_DISCOVERY_SEEDS","/").split(",") if x.strip())
+    configured_seeds=tuple(x.strip() for x in os.environ.get("CYDRA_DISCOVERY_SEEDS","/").split(",") if x.strip())
+    observed_seed_paths=tuple(sorted({path for item in browser_observations for path in item.get("observed_paths",[]) if isinstance(path,str) and path.startswith("/")}))
+    seeds=tuple(dict.fromkeys(configured_seeds + observed_seed_paths))
     observations=[]
     for x in identities:
-        result=discover(adapter,model,seeds=seeds,max_paths=int(os.environ.get("CYDRA_MAX_PATHS","50")),identity_id=x.identity_id)
+        result=discover(adapter,model,seeds=seeds,max_paths=int(os.environ.get("CYDRA_MAX_PATHS","250")),identity_id=x.identity_id)
         observations.extend(result.observations)
     artifact={
         "target":config.target.base_url,
