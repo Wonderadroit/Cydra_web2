@@ -32,7 +32,7 @@ class _Links(HTMLParser):
 
 _ID = re.compile(r'^(?:id|uuid|[A-Za-z][A-Za-z0-9]*(?:_id|_uuid|Id|UUID))$', re.I)
 _PATH = re.compile(r'/(?:api|graphql|rpc|v[0-9]+)(?:/[A-Za-z0-9_.$:@%~+\-{}]+)*')
-_REQUEST = re.compile(r'''\\b(?:(fetch)|(axios|api|client|http|request)\\.(get|post|put|patch|delete|head|options))\\s*\\(\\s*([^,\\)]+)''', re.I)
+_REQUEST = re.compile(r'''\b(?:(fetch)|(axios|api|client|http|request)\.(get|post|put|patch|delete|head|options))\s*\(\s*([^,\)]+)''', re.I)
 _OPEN = re.compile(r'''\.open\s*\(\s*['\"](GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)['\"]\s*,\s*([^,\)]+)''', re.I)
 _ASSIGN = re.compile(r'''\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(['\"])([^'\"]+)\2''')
 _COMBINED = re.compile(r'''\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*([A-Za-z_$][\w$]*)\s*\+\s*(['\"])([^'\"]+)\3''')
