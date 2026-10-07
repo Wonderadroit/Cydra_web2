@@ -46,7 +46,6 @@ jobs:
       CYDRA_VNC_PASSWORD: ${{ secrets.CYDRA_VNC_PASSWORD }}
       CYDRA_TARGET_URL: ${{ inputs.target_url }}
       CYDRA_AUTH_IDENTITY: ${{ inputs.identity_id }}
-      CYDRA_AUTH_WAIT_SECONDS: ${{ inputs.wait_minutes }} * 60
       CYDRA_BUG_BOUNTY_HEADER: "Bugcrowd-cyberwonder"
     steps:
       - uses: actions/checkout@v4
@@ -112,7 +111,9 @@ jobs:
         if: ${{ inputs.mode == 'bootstrap' }}
         env:
           DISPLAY: :99
+          CYDRA_AUTH_WAIT_MINUTES: ${{ inputs.wait_minutes }}
         run: |
+          export CYDRA_AUTH_WAIT_SECONDS=$((CYDRA_AUTH_WAIT_MINUTES * 60))
           echo "Open the Remote browser notice above in your phone browser."
           python scripts/browser_auth_bootstrap.py --bootstrap
 
