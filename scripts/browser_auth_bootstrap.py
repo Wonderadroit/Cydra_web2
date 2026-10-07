@@ -113,39 +113,64 @@ def _bootstrap() -> None:
     header_name = "X-Bug-Bounty"
     header_value = os.environ.get("CYDRA_BUG_BOUNTY_HEADER", "").strip()
 
-    with sync_playwright() as p:
-        launch_kwargs = {
-            "headless": False,
-            "args": ["--start-maximized"],
-        }
-        browser_channel = os.environ.get("CYDRA_BROWSER_CHANNEL", "").strip()
-        if browser_channel:
-            launch_kwargs["channel"] = browser_channel
-        browser = p.chromium.launch(**launch_kwargs)
-        context = browser.new_context(viewport={"width": 1440, "height": 900})
-        if header_value:
-            context.set_extra_http_headers({header_name: header_value})
-        page = context.new_page()
-        page.goto(auth_url, wait_until="domcontentloaded")
-        page.bring_to_front()
+    profile_dir = Path(tempfile.mkdtemp(prefix="cydra-chrome-profile-"))
+    chrome_candidates = [
+        os.environ.get("CYDRA_CHROME_BINARY", "").strip(),
+        "/usr/bin/google-chrome",
+        "/usr/bin/google-chrome-stable",
+        "/usr/bin/chromium",
+        "/usr/bin/chromium-browser",
+    ]
+    chrome_binary = next((x for x in chrome_candidates if x and Path(x).exists()), None)
+    if not chrome_binary:
+        raise RuntimeError("No supported Chrome/Chromium binary found")
+
+    # Phase 1: normal, non-automated browser. Do not attach Playwright/CDP here.
+    chrome = subprocess.Popen(
+        [
+            chrome_binary,
+            f"--user-data-dir={profile_dir}",
+            "--no-first-run",
+            "--no-default-browser-check",
+            "--start-maximized",
+            auth_url,
+        ],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    try:
         print("INTERACTIVE AUTHENTICATION READY")
-        print("The remote browser is already open on the authentication page; sign in normally there.")
+        print("A normal browser process is open directly on the authentication page.")
+        print("Google authentication is completed before CYDRA attaches automation.")
         print(f"Target: {target}")
         print(f"Authentication page: {auth_url}")
         print(f"Identity: {identity}")
+        print("Complete the site's normal sign-in/authentication flow in the remote browser.")
         print(f"Waiting up to {wait_seconds} seconds before capturing browser state.")
         deadline = time.time() + wait_seconds
         while time.time() < deadline:
             time.sleep(5)
+    finally:
+        chrome.terminate()
+        try:
+            chrome.wait(timeout=15)
+        except subprocess.TimeoutExpired:
+            chrome.kill()
 
+    # Phase 2: after the user/browser is finished, attach Playwright only to
+    # the already-authenticated local profile and export encrypted state.
+    with sync_playwright() as p:
+        context = p.chromium.launch_persistent_context(
+            str(profile_dir),
+            headless=True,
+        )
+        if header_value:
+            context.set_extra_http_headers({header_name: header_value})
         context.storage_state(path=state, indexed_db=True)
-        browser.close()
+        context.close()
 
-    # Never print or upload the plaintext state.
-    encrypt_state(state, bundle)
-    state.unlink()
-    print(f"Encrypted authentication state created for identity '{identity}'.")
-    print(f"Artifact file: {bundle}")
+    subprocess.run(["rm", "-rf", str(profile_dir)], check=True)
+
 
 
 def main() -> None:
