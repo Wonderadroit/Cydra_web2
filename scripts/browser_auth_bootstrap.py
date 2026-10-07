@@ -94,6 +94,7 @@ def _self_test() -> None:
 
 def _bootstrap() -> None:
     target = os.environ.get("CYDRA_TARGET_URL", "").strip()
+    auth_url = os.environ.get("CYDRA_AUTH_URL", "").strip() or target
     identity = os.environ.get("CYDRA_AUTH_IDENTITY", "").strip()
     wait_seconds = int(os.environ.get("CYDRA_AUTH_WAIT_SECONDS", "900"))
     if not target:
