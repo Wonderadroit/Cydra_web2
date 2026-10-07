@@ -36,7 +36,9 @@ _REQUEST = re.compile(r'''\b(?:(fetch)|(axios|api|client|http|request)\.(get|pos
 _OPEN = re.compile(r'''\.open\s*\(\s*['\"](GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)['\"]\s*,\s*([^,\)]+)''', re.I)
 _ASSIGN = re.compile(r'''\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(['\"])([^'\"]+)\2''')
 _COMBINED = re.compile(r'''\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*([A-Za-z_$][\w$]*)\s*\+\s*(['\"])([^'\"]+)\3''')
-_ORIGIN = re.compile(r'''(?:baseURL|baseUrl|apiBase|apiBaseUrl|API_BASE_URL|API_BASE|apiUrl|apiURL|API_URL|backendUrl|backendURL|BACKEND_URL|serviceUrl|serviceURL|SERVICE_URL|graphqlUrl|graphqlURL|GRAPHQL_URL|endpointUrl|ENDPOINT_URL|apiEndpoint|apiEndpointUrl|apiHost|apiDomain|baseApiUrl|BASE_API_URL|PUBLIC_API_URL|NEXT_PUBLIC_API_URL|VITE_API_URL)\s*[:=]\s*['\"](https?://[^'\"\s]+)''', re.I)\n_ABSOLUTE_URL = re.compile(r'''['\"](https?://[^'\"\s]+)['\"]''', re.I)\n_CSP = re.compile(r'''(?:connect-src|default-src)\\s+([^;]+)''', re.I)
+_ORIGIN = re.compile(r'''(?:baseURL|baseUrl|apiBase|apiBaseUrl|API_BASE_URL|API_BASE|apiUrl|apiURL|API_URL|backendUrl|backendURL|BACKEND_URL|serviceUrl|serviceURL|SERVICE_URL|graphqlUrl|graphqlURL|GRAPHQL_URL|endpointUrl|ENDPOINT_URL|apiEndpoint|apiEndpointUrl|apiHost|apiDomain|baseApiUrl|BASE_API_URL|PUBLIC_API_URL|NEXT_PUBLIC_API_URL|VITE_API_URL)\s*[:=]\s*['\"](https?://[^'\"\s]+)''', re.I)
+_ABSOLUTE_URL = re.compile(r'''['\"](https?://[^'\"\s]+)['\"]''', re.I)
+_CSP = re.compile(r'''(?:connect-src|default-src)\s+([^;]+)''', re.I)
 
 def _api_paths(body: str):
     out = set()
