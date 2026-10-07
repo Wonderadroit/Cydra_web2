@@ -1,11 +1,14 @@
 name: Web2 live dogfood
 
 on:
+  push:
+    branches: [main]
   workflow_dispatch:
     inputs:
       target_url:
         description: "Explicitly authorized target base URL"
-        required: true
+        required: false
+        default: "https://app.aurory.io"
         type: string
       discovery_seeds:
         description: "Comma-separated in-scope seed paths"
@@ -15,7 +18,7 @@ on:
       max_paths:
         description: "Maximum paths per identity"
         required: false
-        default: "50"
+        default: "250"
         type: string
 
 permissions:
@@ -26,9 +29,9 @@ jobs:
     runs-on: ubuntu-latest
     environment: live-dogfood
     env:
-      CYDRA_TARGET_URL: ${{ inputs.target_url }}
+      CYDRA_TARGET_URL: ${{ inputs.target_url || 'https://app.aurory.io' }}
       CYDRA_DISCOVERY_SEEDS: ${{ inputs.discovery_seeds }}
-      CYDRA_MAX_PATHS: ${{ inputs.max_paths }}
+      CYDRA_MAX_PATHS: ${{ inputs.max_paths || '250' }}
       CYDRA_SHARED_HEADERS: ${{ secrets.CYDRA_SHARED_HEADERS }}
       CYDRA_IDENTITY_HEADERS: ${{ secrets.CYDRA_IDENTITY_HEADERS }}
     steps:
