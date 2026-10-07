@@ -17,8 +17,10 @@ def test_discovery_associates_observed_resource_with_endpoint():
     from cydra_web2.discovery import discover
     from cydra_web2.model import Identity
 
+    calls = []
     class Adapter:
         def request(self, *, method, path, identity_id=None):
+            calls.append(path)
             return SimpleNamespace(
                 identity_id=identity_id, status_code=200,
                 body='{"id":"r1"}', body_sha256="a"*64,
@@ -73,12 +75,14 @@ def test_discovery_analyzes_js_and_models_static_methods():
 def test_discovery_prioritizes_recovered_api_routes_over_static_assets():
     from types import SimpleNamespace
     from cydra_web2.discovery import discover
+    calls = []
     class Adapter:
         def request(self, *, method, path, identity_id=None):
+            calls.append(path)
             body = 'fetch("/v1/me");' if path == "/app.js" else '{"id":"user-1"}' if path == "/v1/me" else '<script src="/static.js"></script>'
             ctype = "application/javascript" if path == "/app.js" else "application/json" if path == "/v1/me" else "text/html"
             return SimpleNamespace(identity_id=identity_id, status_code=200, body=body, headers={"Content-Type": ctype})
     m = TargetModel("https://authorized.example")
-    result = discover(Adapter(), m, seeds=("/app.js",), max_paths=2, max_js_bundles=1)
-    assert result.paths[:2] == ("/app.js", "/v1/me")
+    result = discover(Adapter(), m, seeds=("/app.js",), max_paths=3, max_js_bundles=1)
+    assert calls[:2] == ["/app.js", "/v1/me"]
     assert result.resource_ids
