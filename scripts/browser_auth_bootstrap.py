@@ -164,6 +164,7 @@ def _bootstrap() -> None:
             context.set_extra_http_headers({header_name: header_value})
         page = context.pages[0] if context.pages else context.new_page()
         page.goto(target, wait_until="domcontentloaded")
+        page.wait_for_timeout(2000)
         cookies = context.cookies()
         names = sorted({x["name"] for x in cookies})
         auth_names = [n for n in names if any(k in n.lower() for k in ("auth", "session", "sess", "token", "sid", "jwt", "user"))]
@@ -173,16 +174,48 @@ def _bootstrap() -> None:
         except Exception:
             storage_keys = []
         auth_storage = [n for n in storage_keys if any(k in n.lower() for k in ("auth", "session", "sess", "token", "sid", "jwt", "user", "account"))]
+        # A provider cookie/local-storage key is not sufficient: it can survive after
+        # the application session has expired. Verify an authenticated application
+        # route and require that it stays on an in-scope page instead of returning
+        # the login surface.
+        base = target.rstrip("/")
+        verification_paths = ("/profile", "/profile/inventory")
+        route_checks = []
+        for path in verification_paths:
+            try:
+                probe = context.request.get(base + path, timeout=15000, headers={header_name: header_value} if header_value else None)
+                text = (probe.text() or "").lower()
+                route_checks.append({
+                    "path": path,
+                    "status": probe.status,
+                    "final_url": probe.url,
+                    "login_surface": any(k in text for k in ("sign in to aurory", "log in to aurory", "sign in", "log in")),
+                })
+            except Exception as exc:
+                route_checks.append({"path": path, "error": type(exc).__name__})
         try:
             body = page.locator("body").inner_text(timeout=3000).lower()
         except Exception:
             body = ""
         signed_in_ui = any(k in body for k in ("sign out", "log out", "logout", "disconnect", "my account"))
-        confirmed = bool(auth_names or auth_storage or signed_in_ui)
-        print("AUTHENTICATION EVIDENCE: " + json.dumps({"confirmed": confirmed, "url": page.url, "title": page.title(), "auth_cookie_names": auth_names, "auth_storage_keys": auth_storage, "signed_in_ui": signed_in_ui}, sort_keys=True))
+        protected_route_ok = any(
+            x.get("status", 0) < 400 and not x.get("login_surface", True)
+            for x in route_checks
+        )
+        confirmed = bool(protected_route_ok and (auth_names or auth_storage or signed_in_ui))
+        print("AUTHENTICATION EVIDENCE: " + json.dumps({
+            "confirmed": confirmed,
+            "url": page.url,
+            "title": page.title(),
+            "auth_cookie_names": auth_names,
+            "auth_storage_keys": auth_storage,
+            "signed_in_ui": signed_in_ui,
+            "protected_route_ok": protected_route_ok,
+            "route_checks": route_checks,
+        }, sort_keys=True))
         if not confirmed:
             context.close()
-            raise RuntimeError("AUTHENTICATION_NOT_CONFIRMED: no authenticated session evidence was detected; encrypted state was not created")
+            raise RuntimeError("AUTHENTICATION_NOT_CONFIRMED: application session was not proven on a protected in-scope route; encrypted state was not created")
         context.storage_state(path=state, indexed_db=True)
         context.close()
 
