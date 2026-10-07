@@ -118,7 +118,8 @@ def discover(adapter: HttpAdapter, model: TargetModel, seeds: Iterable[str]=('/'
         if endpoint_id not in model.endpoints: model.add_endpoint(Endpoint(endpoint_id,'GET',path))
         response=adapter.request(method='GET',path=path,identity_id=identity_id)
         fp=hashlib.sha256(response.body.encode()).hexdigest()
-        obs=Observation(f'obs:{len(observations)}',endpoint_id,response.identity_id,response.status_code,fp,len(response.body),f'GET:{path}')
+        observation_key = hashlib.sha256(f"{response.identity_id or ''}|{endpoint_id}|{fp}".encode()).hexdigest()[:20]
+        obs=Observation(f'obs:{observation_key}',endpoint_id,response.identity_id,response.status_code,fp,len(response.body),f'GET:{path}')
         model.add_observation(obs); observations.append(obs)
         ctype=str(getattr(response,'headers',{}).get('Content-Type','')).lower(); is_js='javascript' in ctype or path.lower().endswith(('.js','.mjs'))
         if is_js and path not in analyzed and len(analyzed)<max_js_bundles: analyses.append(_analyze_bundle(path,response.body,model.target)); analyzed.add(path)
