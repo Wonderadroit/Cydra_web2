@@ -109,11 +109,19 @@ def discover(adapter: HttpAdapter, model: TargetModel, seeds: Iterable[str]=('/'
         model.add_observation(obs); observations.append(obs)
         ctype=str(getattr(response,'headers',{}).get('Content-Type','')).lower(); is_js='javascript' in ctype or path.lower().endswith(('.js','.mjs'))
         if is_js and path not in analyzed and len(analyzed)<max_js_bundles: analyses.append(_analyze_bundle(path,response.body,model.target)); analyzed.add(path)
-        candidates=set(_api_paths(response.body))
-        parser=_Links(); parser.feed(response.body); candidates.update(x for x in parser.links if x.startswith('/'))
-        if is_js: candidates.update(x for _,x in analyses[-1].endpoints if x.startswith('/'))
-        for candidate in sorted(candidates):
-            if candidate not in seen and candidate not in queue: queue.append(candidate)
+        api_candidates = set(_api_paths(response.body))
+        parser = _Links(); parser.feed(response.body)
+        static_candidates = {x for x in parser.links if x.startswith('/')}
+        if is_js:
+            api_candidates.update(x for _, x in analyses[-1].endpoints if x.startswith('/') and '{' not in x)
+        # API routes are the security-research frontier; static assets remain fallback discovery.
+        api_candidates = {x for x in api_candidates if x.startswith('/') and '{' not in x}
+        for candidate in sorted(api_candidates, reverse=True):
+            if candidate not in seen and candidate not in queue:
+                queue.insert(0, candidate)
+        for candidate in sorted(static_candidates):
+            if candidate not in seen and candidate not in queue:
+                queue.append(candidate)
         for key,identifier,field_path in _ids(_documents(response.body)):
             rid='resource:'+hashlib.sha256((key+'|'+identifier).encode()).hexdigest()[:16]
             if rid not in model.resources: model.add_resource(Resource(rid,key,None,identifier,obs.id)); resource_ids.append(rid)
