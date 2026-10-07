@@ -1,0 +1,126 @@
+name: Web2 interactive browser authentication
+
+on:
+  pull_request:
+    paths:
+      - "scripts/browser_auth_bootstrap.py"
+      - ".github/workflows/browser-auth-bootstrap.yml"
+      - "pyproject.toml"
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Authentication workflow mode"
+        required: true
+        default: "bootstrap"
+        type: choice
+        options:
+          - self-test
+          - bootstrap
+      target_url:
+        description: "Explicitly authorized target base URL"
+        required: false
+        default: "https://app.aurory.io"
+        type: string
+      identity_id:
+        description: "Identity label to store"
+        required: false
+        default: "aurory-a"
+        type: string
+      wait_minutes:
+        description: "Minutes available to complete browser sign-in"
+        required: false
+        default: "15"
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  auth:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    environment: live-dogfood
+    env:
+      CYDRA_AUTH_ENCRYPTION_KEY: ${{ secrets.CYDRA_AUTH_ENCRYPTION_KEY }}
+      CYDRA_VNC_PASSWORD: ${{ secrets.CYDRA_VNC_PASSWORD }}
+      CYDRA_TARGET_URL: ${{ inputs.target_url }}
+      CYDRA_AUTH_IDENTITY: ${{ inputs.identity_id }}
+      CYDRA_AUTH_WAIT_SECONDS: ${{ inputs.wait_minutes }} * 60
+      CYDRA_BUG_BOUNTY_HEADER: "Bugcrowd-cyberwonder"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[browser]"
+          pip install "cryptography>=43"
+
+      - name: Install browser and desktop bridge
+        if: ${{ github.event_name == 'pull_request' || inputs.mode != 'self-test' }}
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb x11vnc novnc openbox
+          python -m playwright install --with-deps chromium
+          python -m playwright install chrome
+
+      - name: Run deterministic authentication regression
+        if: ${{ github.event_name == 'pull_request' || inputs.mode == 'self-test' }}
+        run: python scripts/browser_auth_bootstrap.py --self-test
+
+      - name: Validate interactive secret configuration
+        if: ${{ inputs.mode == 'bootstrap' }}
+        run: |
+          test -n "$CYDRA_AUTH_ENCRYPTION_KEY" || (echo "CYDRA_AUTH_ENCRYPTION_KEY is required" && exit 1)
+          test -n "$CYDRA_VNC_PASSWORD" || (echo "CYDRA_VNC_PASSWORD is required" && exit 1)
+          test ${#CYDRA_VNC_PASSWORD} -ge 8 || (echo "CYDRA_VNC_PASSWORD must be at least 8 characters" && exit 1)
+
+      - name: Start virtual desktop
+        if: ${{ inputs.mode == 'bootstrap' }}
+        run: |
+          Xvfb :99 -screen 0 1440x900x24 -ac +extension RANDR >/tmp/xvfb.log 2>&1 &
+          openbox >/tmp/openbox.log 2>&1 &
+          x11vnc -storepasswd "$CYDRA_VNC_PASSWORD" /tmp/cydra-vnc.pass >/dev/null
+          x11vnc -display :99 -rfbport 5900 -rfbauth /tmp/cydra-vnc.pass -forever -shared -localhost >/tmp/x11vnc.log 2>&1 &
+          sleep 2
+          /usr/share/novnc/utils/novnc_proxy --vnc localhost:5900 --listen 6080 >/tmp/novnc.log 2>&1 &
+          sleep 2
+
+      - name: Start temporary remote access tunnel
+        if: ${{ inputs.mode == 'bootstrap' }}
+        run: |
+          curl -fsSL https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -o /tmp/cloudflared
+          chmod +x /tmp/cloudflared
+          /tmp/cloudflared tunnel --no-autoupdate --url http://127.0.0.1:6080 >/tmp/cloudflared.log 2>&1 &
+          for i in $(seq 1 30); do
+            url=$(grep -Eo 'https://[a-z0-9-]+\.trycloudflare\.com' /tmp/cloudflared.log | head -1 || true)
+            if [ -n "$url" ]; then
+              echo "REMOTE_BROWSER_URL=$url"
+              echo "::notice title=Remote browser::$url"
+              break
+            fi
+            sleep 2
+          done
+          test -n "$url" || { cat /tmp/cloudflared.log; exit 1; }
+
+      - name: Capture interactive authentication state
+        if: ${{ inputs.mode == 'bootstrap' }}
+        env:
+          DISPLAY: :99
+        run: |
+          echo "Open the Remote browser notice above in your phone browser."
+          python scripts/browser_auth_bootstrap.py --bootstrap
+
+      - name: Upload encrypted authentication state
+        if: ${{ inputs.mode == 'bootstrap' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: cydra-browser-auth-${{ inputs.identity_id }}
+          path: artifacts/browser-auth/*.encrypted
+          retention-days: 7
+          if-no-files-found: error
