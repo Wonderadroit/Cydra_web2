@@ -21,6 +21,11 @@ on:
         required: false
         default: "https://app.aurory.io"
         type: string
+      auth_url:
+        description: "Authentication page to open directly in the remote browser"
+        required: false
+        default: "https://app.aurory.io"
+        type: string
       identity_id:
         description: "Identity label to store"
         required: false
@@ -45,6 +50,7 @@ jobs:
       CYDRA_AUTH_ENCRYPTION_KEY: ${{ secrets.CYDRA_AUTH_ENCRYPTION_KEY }}
       CYDRA_VNC_PASSWORD: ${{ secrets.CYDRA_VNC_PASSWORD }}
       CYDRA_TARGET_URL: ${{ inputs.target_url }}
+      CYDRA_AUTH_URL: ${{ inputs.auth_url }}
       CYDRA_AUTH_IDENTITY: ${{ inputs.identity_id }}
       CYDRA_BUG_BOUNTY_HEADER: "Bugcrowd-cyberwonder"
     steps:
