@@ -32,7 +32,7 @@ class _Links(HTMLParser):
 
 _ID = re.compile(r'^(?:id|uuid|[A-Za-z][A-Za-z0-9]*(?:_id|_uuid|Id|UUID))$', re.I)
 _PATH = re.compile(r'/(?:api|graphql|rpc|v[0-9]+)(?:/[A-Za-z0-9_.$:@%~+\-{}]+)*')
-_REQUEST = re.compile(r'''\b(?:fetch\s*\(\s*|axios\.(get|post|put|patch|delete|head|options)\s*\(\s*|(?:api|client|http|request)\.(get|post|put|patch|delete|head|options)\s*\(\s*|new\s+Request\s*\(\s*)([^,\)]+)''', re.I)
+_REQUEST = re.compile(r'''\\b(?:(fetch)|(axios|api|client|http|request)\\.(get|post|put|patch|delete|head|options))\\s*\\(\\s*([^,\\)]+)''', re.I)
 _OPEN = re.compile(r'''\.open\s*\(\s*['\"](GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)['\"]\s*,\s*([^,\)]+)''', re.I)
 _ASSIGN = re.compile(r'''\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(['\"])([^'\"]+)\2''')
 _COMBINED = re.compile(r'''\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*([A-Za-z_$][\w$]*)\s*\+\s*(['\"])([^'\"]+)\3''')
@@ -82,8 +82,9 @@ def _analyze_bundle(path, body, target):
         if m.group(2) in constants: constants[m.group(1)]=constants[m.group(2)]+m.group(4)
     endpoints=set(); origins=set(_ORIGIN.findall(body)); request_origins=set(); methods=set(); unresolved=set()
     for m in _REQUEST.finditer(body):
-        method=(m.group(1) or 'GET').upper(); value=_resolve(m.group(2),constants); methods.add(method)
-        if value is None: unresolved.add(m.group(2).strip()); continue
+        method = 'GET' if m.group(1) else m.group(3).upper()
+        expr = m.group(4); value = _resolve(expr, constants); methods.add(method)
+        if value is None: unresolved.add(expr.strip()); continue
         parsed=urlparse(urljoin(target,value)); origin=f'{parsed.scheme}://{parsed.netloc}'
         request_origins.add((value,origin))
         if parsed.hostname==urlparse(target).hostname and parsed.path.startswith('/') and re.match(r'^/(?:api|graphql|rpc|v[0-9]+)(?:/|$)',parsed.path,re.I): endpoints.add((method,parsed.path.split('?',1)[0]))
@@ -106,7 +107,7 @@ def discover(adapter: HttpAdapter, model: TargetModel, seeds: Iterable[str]=('/'
         fp=hashlib.sha256(response.body.encode()).hexdigest()
         obs=Observation(f'obs:{len(observations)}',endpoint_id,response.identity_id,response.status_code,fp,len(response.body),f'GET:{path}')
         model.add_observation(obs); observations.append(obs)
-        ctype=str(response.headers.get('Content-Type','')).lower(); is_js='javascript' in ctype or path.lower().endswith(('.js','.mjs'))
+        ctype=str(getattr(response,'headers',{}).get('Content-Type','')).lower(); is_js='javascript' in ctype or path.lower().endswith(('.js','.mjs'))
         if is_js and path not in analyzed and len(analyzed)<max_js_bundles: analyses.append(_analyze_bundle(path,response.body,model.target)); analyzed.add(path)
         candidates=set(_api_paths(response.body))
         parser=_Links(); parser.feed(response.body); candidates.update(x for x in parser.links if x.startswith('/'))
