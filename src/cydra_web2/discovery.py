@@ -82,7 +82,13 @@ def _analyze_bundle(path, body, target):
     constants={m.group(1):m.group(3) for m in _ASSIGN.finditer(body)}
     for m in _COMBINED.finditer(body):
         if m.group(2) in constants: constants[m.group(1)]=constants[m.group(2)]+m.group(4)
-    endpoints=set(); origins=set(_ORIGIN.findall(body)); request_origins=set(); methods=set(); unresolved=set()\n    for absolute in _ABSOLUTE_URL.findall(body):\n        parsed=urlparse(absolute)\n        if parsed.hostname:\n            origin=f'{parsed.scheme}://{parsed.netloc}'\n            origins.add(origin)\n            request_origins.add((absolute, origin))
+    endpoints=set(); origins=set(_ORIGIN.findall(body)); request_origins=set(); methods=set(); unresolved=set()
+    for absolute in _ABSOLUTE_URL.findall(body):
+        parsed=urlparse(absolute)
+        if parsed.hostname:
+            origin=f'{parsed.scheme}://{parsed.netloc}'
+            origins.add(origin)
+            request_origins.add((absolute, origin))
     for m in _REQUEST.finditer(body):
         method = 'GET' if m.group(1) else m.group(3).upper()
         expr = m.group(4); value = _resolve(expr, constants); methods.add(method)
@@ -96,7 +102,12 @@ def _analyze_bundle(path, body, target):
         parsed=urlparse(urljoin(target,value)); request_origins.add((value,f'{parsed.scheme}://{parsed.netloc}'))
         if parsed.hostname==urlparse(target).hostname and re.match(r'^/(?:api|graphql|rpc|v[0-9]+)(?:/|$)',parsed.path,re.I): endpoints.add((method,parsed.path.split('?',1)[0]))
     for value in _api_paths(body): endpoints.add(('GET',value)); request_origins.add((value,f'{urlparse(target).scheme}://{urlparse(target).netloc}'))
-    for csp_match in _CSP.finditer(body):\n        for token in csp_match.group(1).split():\n            parsed=urlparse(token)\n            if parsed.scheme in {'http','https'} and parsed.hostname:\n                origins.add(f'{parsed.scheme}://{parsed.netloc}')\n    return BundleAnalysis(path,tuple(sorted(methods)),tuple(sorted(endpoints)),tuple(sorted(request_origins)),tuple(sorted(origins)),tuple(sorted(unresolved)))
+    for csp_match in _CSP.finditer(body):
+        for token in csp_match.group(1).split():
+            parsed=urlparse(token)
+            if parsed.scheme in {'http','https'} and parsed.hostname:
+                origins.add(f'{parsed.scheme}://{parsed.netloc}')
+    return BundleAnalysis(path,tuple(sorted(methods)),tuple(sorted(endpoints)),tuple(sorted(request_origins)),tuple(sorted(origins)),tuple(sorted(unresolved)))
 
 def discover(adapter: HttpAdapter, model: TargetModel, seeds: Iterable[str]=('/',), max_paths: int=50, identity_id: str|None=None, max_js_bundles: int=50)->DiscoveryResult:
     queue=list(dict.fromkeys(seeds)); seen=set(); observations=[]; resource_ids=[]; analyses=[]; analyzed=set()
