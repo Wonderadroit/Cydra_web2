@@ -100,15 +100,17 @@ jobs:
             url=$(grep -Eo 'https://[a-z0-9-]+\.trycloudflare\.com' /tmp/cloudflared.log | head -1 || true)
             if [ -n "$url" ]; then
               echo "REMOTE_BROWSER_URL=$url"
-              echo "::notice title=Remote browser::$url"
+              echo "::notice title=REMOTE BROWSER READY — OPEN THIS URL::$url"
               {
                 echo "## 🔐 CYDRA Remote Browser"
                 echo
-                echo "**Open this link immediately in your phone browser:**"
+                echo "## **ACTION REQUIRED: TAP THE LINK BELOW ON YOUR PHONE**"
+                echo
+                echo "**Do not wait for Chrome to open automatically.** GitHub Actions cannot open a browser on your phone."
                 echo
                 echo "[$url]($url)"
                 echo
-                echo "Keep this Actions run open while you sign in. The link is temporary and expires when the job ends."
+                echo "Tap the link, sign in, and keep this Actions run open until authentication finishes. The link is temporary and expires when the job ends."
               } >> "$GITHUB_STEP_SUMMARY"
               break
             fi
@@ -126,7 +128,7 @@ jobs:
           CYDRA_AUTH_WAIT_MINUTES: ${{ inputs.wait_minutes }}
         run: |
           export CYDRA_AUTH_WAIT_SECONDS=$((CYDRA_AUTH_WAIT_MINUTES * 60))
-          echo "Open the Remote browser notice above in your phone browser."
+          echo "ACTION REQUIRED: Open the REMOTE BROWSER URL from the job summary/notice. The browser will NOT open automatically on your phone."
           python scripts/browser_auth_bootstrap.py --bootstrap
 
       - name: Upload encrypted authentication state
