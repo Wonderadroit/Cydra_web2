@@ -1,6 +1,8 @@
 name: Web2 public discovery development
 
 on:
+  push:
+    branches: [main]
   workflow_dispatch:
     inputs:
       target_url:
@@ -27,9 +29,9 @@ jobs:
     runs-on: ubuntu-latest
     environment: live-dogfood
     env:
-      CYDRA_TARGET_URL: ${{ inputs.target_url }}
-      CYDRA_DISCOVERY_SEEDS: ${{ inputs.discovery_seeds }}
-      CYDRA_MAX_PATHS: ${{ inputs.max_paths }}
+      CYDRA_TARGET_URL: ${{ inputs.target_url || 'https://app.aurory.io' }}
+      CYDRA_DISCOVERY_SEEDS: ${{ inputs.discovery_seeds || '/' }}
+      CYDRA_MAX_PATHS: ${{ inputs.max_paths || '50' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
