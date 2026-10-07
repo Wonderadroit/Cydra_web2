@@ -17,8 +17,10 @@ def test_discovery_associates_observed_resource_with_endpoint():
     from cydra_web2.discovery import discover
     from cydra_web2.model import Identity
 
+    calls = []
     class Adapter:
         def request(self, *, method, path, identity_id=None):
+            calls.append(path)
             return SimpleNamespace(
                 identity_id=identity_id, status_code=200,
                 body='{"id":"r1"}', body_sha256="a"*64,
@@ -80,5 +82,5 @@ def test_discovery_prioritizes_recovered_api_routes_over_static_assets():
             return SimpleNamespace(identity_id=identity_id, status_code=200, body=body, headers={"Content-Type": ctype})
     m = TargetModel("https://authorized.example")
     result = discover(Adapter(), m, seeds=("/app.js",), max_paths=3, max_js_bundles=1)
-    assert result.paths[:2] == ("/app.js", "/v1/me")
+    assert calls[:2] == ["/app.js", "/v1/me"]
     assert result.resource_ids
