@@ -1,0 +1,118 @@
+name: Web2 authenticated live dogfood
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_url:
+        description: "Explicitly authorized target base URL"
+        required: true
+        default: "https://app.aurory.io"
+        type: string
+      identities:
+        description: "Comma-separated stored identity labels, at least two"
+        required: true
+        default: "aurory-a,aurory-b"
+        type: string
+      discovery_seeds:
+        description: "Comma-separated in-scope seed paths"
+        required: false
+        default: "/"
+        type: string
+      max_paths:
+        description: "Maximum paths per identity"
+        required: false
+        default: "50"
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  authenticated-dogfood:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: live-dogfood
+    env:
+      CYDRA_AUTH_ENCRYPTION_KEY: ${{ secrets.CYDRA_AUTH_ENCRYPTION_KEY }}
+      CYDRA_TARGET_URL: ${{ inputs.target_url }}
+      CYDRA_DISCOVERY_SEEDS: ${{ inputs.discovery_seeds }}
+      CYDRA_MAX_PATHS: ${{ inputs.max_paths }}
+      CYDRA_SHARED_HEADERS: '{"X-Bug-Bounty":"Bugcrowd-cyberwonder"}'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[browser]"
+          pip install "cryptography>=43"
+          python -m playwright install --with-deps chromium
+
+      - name: Validate encrypted-state secret
+        run: |
+          test -n "$CYDRA_AUTH_ENCRYPTION_KEY" || (echo "CYDRA_AUTH_ENCRYPTION_KEY is required" && exit 1)
+          python - <<'PY'
+          from cryptography.fernet import Fernet
+          import os
+          Fernet(os.environ["CYDRA_AUTH_ENCRYPTION_KEY"].encode())
+          print("authentication encryption key: valid")
+          PY
+
+      - name: Download latest encrypted state for each identity
+        env:
+          GH_TOKEN: ${{ github.token }}
+          IDENTITIES: ${{ inputs.identities }}
+        run: |
+          rm -rf artifacts/auth-state
+          mkdir -p artifacts/auth-state
+          IFS=',' read -ra IDS <<< "$IDENTITIES"
+          test "${#IDS[@]}" -ge 2 || (echo "At least two identities are required" && exit 1)
+          for identity in "${IDS[@]}"; do
+            identity="$(echo "$identity" | xargs)"
+            test -n "$identity" || exit 1
+            name="cydra-browser-auth-$identity"
+            run_id="$(gh api --paginate "repos/$GITHUB_REPOSITORY/actions/artifacts?name=$name&per_page=100" --jq '.artifacts[] | select(.expired == false) | .workflow_run.id' | head -1)"
+            test -n "$run_id" || (echo "No non-expired encrypted state artifact found for $identity" && exit 1)
+            mkdir -p "artifacts/auth-state/$identity"
+            gh run download "$run_id" --repo "$GITHUB_REPOSITORY" --name "$name" --dir "artifacts/auth-state/$identity"
+            find "artifacts/auth-state/$identity" -type f -maxdepth 3 -print
+          done
+
+      - name: Materialize browser states in memory
+        env:
+          IDENTITIES: ${{ inputs.identities }}
+        run: |
+          export CYDRA_BROWSER_STORAGE_STATES="$(python - <<'PY'
+          import base64, json, os
+          from pathlib import Path
+          from cryptography.fernet import Fernet
+          cipher = Fernet(os.environ["CYDRA_AUTH_ENCRYPTION_KEY"].encode())
+          out = {}
+          for identity in [x.strip() for x in os.environ["IDENTITIES"].split(",") if x.strip()]:
+              matches = list(Path("artifacts/auth-state", identity).rglob("*.encrypted"))
+              if len(matches) != 1:
+                  raise SystemExit(f"expected exactly one encrypted state for {identity}, found {len(matches)}")
+              state = json.loads(cipher.decrypt(matches[0].read_bytes()).decode())
+              if not isinstance(state, dict):
+                  raise SystemExit(f"invalid browser state for {identity}")
+              out[identity] = base64.b64encode(
+                  json.dumps(state, separators=(",", ":")).encode()
+              ).decode()
+          print(json.dumps(out, separators=(",", ":")))
+          PY
+          )"
+          export CYDRA_BROWSER_STORAGE_STATES
+          python scripts/browser_live_dogfood.py
+
+      - name: Upload observation artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cydra-web2-authenticated-live-dogfood
+          path: artifacts/live-browser-dogfood.json
+          if-no-files-found: warn
