@@ -53,11 +53,21 @@ def main() -> int:
         replays=(),
         assessment=None,
     )
+    api_frontier = sorted(
+        endpoint.path
+        for endpoint in model.endpoints.values()
+        if endpoint.path.startswith("/api/") or endpoint.path.startswith("/graphql") or endpoint.path.startswith("/v1/") or endpoint.path.startswith("/v2/") or endpoint.path.startswith("/v3/")
+    )
     artifact["live"] = {
         "mode": "public-anonymous-discovery",
         "discovery_observations": len(result.observations),
         "paths": list(result.paths),
         "status": "anonymous observation only; ownership/authentication boundaries remain unresolved",
+        "api_frontier": api_frontier,
+        "hypothesis_frontier": [
+            {"id": h.id, "kind": h.kind.value, "claim": h.claim}
+            for h in frontier.prioritized()
+        ],
     }
 
     output = Path(os.environ.get("CYDRA_ARTIFACT", "artifacts/public-discovery.json"))
