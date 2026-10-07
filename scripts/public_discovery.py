@@ -68,6 +68,10 @@ def main() -> int:
             {"id": o.id, "endpoint": o.endpoint_id, "status_code": o.status_code, "identity_id": o.identity_id, "body_size": o.body_size, "fingerprint": o.body_fingerprint}
             for o in result.observations
         ],
+        "observations": [
+            {"id": o.id, "endpoint": o.endpoint_id, "status_code": o.status_code, "identity_id": o.identity_id, "body_size": o.body_length, "fingerprint": o.body_sha256}
+            for o in result.observations
+        ],
         "hypothesis_frontier": [
             {"id": h.id, "kind": h.kind.value, "claim": h.claim}
             for h in frontier.prioritized()
