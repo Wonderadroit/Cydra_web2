@@ -80,5 +80,5 @@ def test_discovery_prioritizes_recovered_api_routes_over_static_assets():
             return SimpleNamespace(identity_id=identity_id, status_code=200, body=body, headers={"Content-Type": ctype})
     m = TargetModel("https://authorized.example")
     result = discover(Adapter(), m, seeds=("/app.js",), max_paths=3, max_js_bundles=1)
-    assert result.paths[:2] == ("/app.js", "/v1/me")
+    assert result.paths[:2] == ("/v1/me", "/app.js")
     assert result.resource_ids
