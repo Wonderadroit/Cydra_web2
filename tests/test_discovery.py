@@ -30,3 +30,9 @@ def test_discovery_associates_observed_resource_with_endpoint():
     endpoint=m.endpoints["GET /"]
     assert endpoint.resource_ids == (result.resource_ids[0],)
     assert m.observations[0].identity_id=="alice"
+
+
+def test_api_paths_are_extracted_from_public_javascript():
+    from cydra_web2.discovery import _api_paths
+    body='const a="/api/users/123"; const b="/graphql"; const c="/v2/inventory";'
+    assert _api_paths(body) == {"/api/users/123", "/graphql", "/v2/inventory"}
