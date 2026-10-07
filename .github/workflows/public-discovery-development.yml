@@ -18,7 +18,7 @@ on:
       max_paths:
         description: "Maximum paths to explore"
         required: false
-        default: "50"
+        default: "250"
         type: string
 
 permissions:
@@ -31,7 +31,7 @@ jobs:
     env:
       CYDRA_TARGET_URL: ${{ inputs.target_url || 'https://app.aurory.io' }}
       CYDRA_DISCOVERY_SEEDS: ${{ inputs.discovery_seeds || '/' }}
-      CYDRA_MAX_PATHS: ${{ inputs.max_paths || '50' }}
+      CYDRA_MAX_PATHS: ${{ inputs.max_paths || '250' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
