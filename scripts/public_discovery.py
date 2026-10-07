@@ -68,6 +68,10 @@ def main() -> int:
             {"id": o.id, "endpoint": o.endpoint_id, "status_code": o.status_code, "identity_id": o.identity_id, "body_size": o.body_length, "fingerprint": o.body_sha256}
             for o in result.observations
         ],
+        "bundle_frontier": [
+            {"path": a.path, "methods": list(a.methods), "endpoints": [{"method": m, "path": p} for m, p in a.endpoints], "service_origins": list(a.service_origins), "request_origins": [{"value": v, "origin": o} for v, o in a.request_origins], "unresolved": list(a.unresolved)}
+            for a in result.bundle_analyses
+        ],
         "hypothesis_frontier": [
             {"id": h.id, "kind": h.kind.value, "claim": h.claim}
             for h in frontier.prioritized()
