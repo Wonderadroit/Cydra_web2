@@ -91,39 +91,54 @@ jobs:
           openbox >/tmp/openbox.log 2>&1 &
           x11vnc -storepasswd "$CYDRA_VNC_PASSWORD" /tmp/cydra-vnc.pass >/dev/null
           x11vnc -display :99 -rfbport 5900 -rfbauth /tmp/cydra-vnc.pass -forever -shared -localhost >/tmp/x11vnc.log 2>&1 &
-          sleep 2
+          for i in $(seq 1 20); do
+            if (echo >/dev/tcp/127.0.0.1/5900) >/dev/null 2>&1; then break; fi
+            sleep 1
+          done
+          (echo >/dev/tcp/127.0.0.1/5900) >/dev/null 2>&1 || { cat /tmp/x11vnc.log; exit 1; }
           /usr/share/novnc/utils/novnc_proxy --vnc localhost:5900 --listen 6080 >/tmp/novnc.log 2>&1 &
-          sleep 2
+          for i in $(seq 1 20); do
+            if curl -fsS http://127.0.0.1:6080/vnc.html >/dev/null 2>&1; then break; fi
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:6080/vnc.html >/dev/null || { cat /tmp/novnc.log; exit 1; }
+          echo "VNC backend is listening on 127.0.0.1:5900"
+          echo "noVNC HTTP frontend is healthy on 127.0.0.1:6080"
 
       - name: Start temporary remote access tunnel
         if: ${{ inputs.mode == 'bootstrap' }}
         run: |
+          set -euo pipefail
           curl -fsSL https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -o /tmp/cloudflared
           chmod +x /tmp/cloudflared
           /tmp/cloudflared tunnel --no-autoupdate --url http://127.0.0.1:6080 >/tmp/cloudflared.log 2>&1 &
+          url=""
           for i in $(seq 1 30); do
             url=$(grep -Eo 'https://[a-z0-9-]+\.trycloudflare\.com' /tmp/cloudflared.log | head -1 || true)
             if [ -n "$url" ]; then
-              echo "REMOTE_BROWSER_URL=$url"
-              echo "::notice title=REMOTE BROWSER READY — OPEN THIS URL::$url"
-              {
-                echo "## 🔐 CYDRA Remote Browser"
-                echo
-                echo "## **ACTION REQUIRED: TAP THE LINK BELOW ON YOUR PHONE**"
-                echo
-                echo "**Do not wait for Chrome to open automatically.** GitHub Actions cannot open a browser on your phone."
-                echo
-                echo "[$url]($url)"
-                echo
-                echo "Tap the link, sign in, and keep this Actions run open until authentication finishes. The link is temporary and expires when the job ends."
-              } >> "$GITHUB_STEP_SUMMARY"
               break
             fi
             sleep 2
           done
           test -n "$url" || { cat /tmp/cloudflared.log; exit 1; }
-          echo "Remote browser is ready: $url"
-          echo "Open: $url"
+          remote_url="$url/vnc.html?autoconnect=true&resize=remote&reconnect=true&reconnect_delay=2"
+          echo "REMOTE_BROWSER_URL=$remote_url"
+          echo "::notice title=REMOTE BROWSER READY — OPEN THIS URL::$remote_url"
+          {
+            echo "## 🔐 CYDRA Remote Browser"
+            echo
+            echo "## **ACTION REQUIRED: TAP THE LINK BELOW ON YOUR PHONE**"
+            echo
+            echo "**Do not wait for Chrome to open automatically.** GitHub Actions cannot open a browser on your phone."
+            echo
+            echo "[$remote_url]($remote_url)"
+            echo
+            echo "Tap the link, connect to the VNC session, sign in, and keep this Actions run open until authentication finishes."
+            echo
+            echo "The link is temporary and expires when the job ends."
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "Remote browser is ready: $remote_url"
+          echo "Open: $remote_url"
           echo "VNC password: use the exact 8-character CYDRA_VNC_PASSWORD configured for this repository/environment."
 
       - name: Capture interactive authentication state
