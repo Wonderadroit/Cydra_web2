@@ -99,6 +99,8 @@ def _bootstrap() -> None:
     wait_seconds = int(os.environ.get("CYDRA_AUTH_WAIT_SECONDS", "900"))
     if not target:
         raise ValueError("CYDRA_TARGET_URL is required")
+    if not auth_url:
+        raise ValueError("CYDRA_AUTH_URL or CYDRA_TARGET_URL is required")
     if not identity:
         raise ValueError("CYDRA_AUTH_IDENTITY is required")
     _fernet()
@@ -124,10 +126,12 @@ def _bootstrap() -> None:
         if header_value:
             context.set_extra_http_headers({header_name: header_value})
         page = context.new_page()
-        page.goto(target, wait_until="domcontentloaded")
+        page.goto(auth_url, wait_until="domcontentloaded")
+        page.bring_to_front()
         print("INTERACTIVE AUTHENTICATION READY")
-        print("Use the remote browser shown by the workflow to sign in normally.")
+        print("The remote browser is already open on the authentication page; sign in normally there.")
         print(f"Target: {target}")
+        print(f"Authentication page: {auth_url}")
         print(f"Identity: {identity}")
         print(f"Waiting up to {wait_seconds} seconds before capturing browser state.")
         deadline = time.time() + wait_seconds
