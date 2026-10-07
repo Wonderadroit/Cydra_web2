@@ -77,11 +77,16 @@ jobs:
         run: |
           test -n "$CYDRA_AUTH_ENCRYPTION_KEY" || (echo "CYDRA_AUTH_ENCRYPTION_KEY is required" && exit 1)
           test -n "$CYDRA_VNC_PASSWORD" || (echo "CYDRA_VNC_PASSWORD is required" && exit 1)
-          test ${#CYDRA_VNC_PASSWORD} -ge 8 || (echo "CYDRA_VNC_PASSWORD must be at least 8 characters" && exit 1)
+          if [ ${#CYDRA_VNC_PASSWORD} -ne 8 ]; then
+            echo "CYDRA_VNC_PASSWORD must be exactly 8 characters because x11vnc VNC passwords are limited to 8 characters."
+            echo "Update the repository/environment secret, then rerun this workflow."
+            exit 1
+          fi
 
       - name: Start virtual desktop
         if: ${{ inputs.mode == 'bootstrap' }}
         run: |
+          set -euo pipefail
           Xvfb :99 -screen 0 1440x900x24 -ac +extension RANDR >/tmp/xvfb.log 2>&1 &
           openbox >/tmp/openbox.log 2>&1 &
           x11vnc -storepasswd "$CYDRA_VNC_PASSWORD" /tmp/cydra-vnc.pass >/dev/null
@@ -119,7 +124,7 @@ jobs:
           test -n "$url" || { cat /tmp/cloudflared.log; exit 1; }
           echo "Remote browser is ready: $url"
           echo "Open: $url"
-          echo "VNC password: use the CYDRA_VNC_PASSWORD you configured for this repository."
+          echo "VNC password: use the exact 8-character CYDRA_VNC_PASSWORD configured for this repository/environment."
 
       - name: Capture interactive authentication state
         if: ${{ inputs.mode == 'bootstrap' }}
