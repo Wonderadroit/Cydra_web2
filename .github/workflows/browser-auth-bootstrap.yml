@@ -145,7 +145,7 @@ jobs:
             echo
             echo "[$remote_url]($remote_url)"
             echo
-            echo "Tap the link, connect to the VNC session, sign in, and keep this Actions run open until authentication finishes."
+            echo "Tap the link, connect to the VNC session, and sign in on the authentication page. Google authentication happens in a normal browser process; CYDRA only attaches after this waiting phase."
             echo
             echo "The link is temporary and expires when the job ends."
           } >> "$GITHUB_STEP_SUMMARY"
@@ -160,7 +160,7 @@ jobs:
           CYDRA_AUTH_WAIT_MINUTES: ${{ inputs.wait_minutes }}
         run: |
           export CYDRA_AUTH_WAIT_SECONDS=$((CYDRA_AUTH_WAIT_MINUTES * 60))
-          echo "ACTION REQUIRED: Open the REMOTE BROWSER URL from the job summary/notice. The browser will NOT open automatically on your phone."
+          echo "ACTION REQUIRED: Open the REMOTE BROWSER URL from the job summary/notice. The browser will already be on the configured authentication page. The browser will NOT open automatically on your phone."
           python scripts/browser_auth_bootstrap.py --bootstrap
 
       - name: Upload encrypted authentication state
