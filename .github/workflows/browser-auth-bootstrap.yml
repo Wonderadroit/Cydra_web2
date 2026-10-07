@@ -101,11 +101,23 @@ jobs:
             if [ -n "$url" ]; then
               echo "REMOTE_BROWSER_URL=$url"
               echo "::notice title=Remote browser::$url"
+              {
+                echo "## 🔐 CYDRA Remote Browser"
+                echo
+                echo "**Open this link immediately in your phone browser:**"
+                echo
+                echo "[$url]($url)"
+                echo
+                echo "Keep this Actions run open while you sign in. The link is temporary and expires when the job ends."
+              } >> "$GITHUB_STEP_SUMMARY"
               break
             fi
             sleep 2
           done
           test -n "$url" || { cat /tmp/cloudflared.log; exit 1; }
+          echo "Remote browser is ready: $url"
+          echo "Open: $url"
+          echo "VNC password: use the CYDRA_VNC_PASSWORD you configured for this repository."
 
       - name: Capture interactive authentication state
         if: ${{ inputs.mode == 'bootstrap' }}
