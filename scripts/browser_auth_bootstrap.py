@@ -111,11 +111,14 @@ def _bootstrap() -> None:
     header_value = os.environ.get("CYDRA_BUG_BOUNTY_HEADER", "").strip()
 
     with sync_playwright() as p:
-        browser = p.chromium.launch(
-            channel=os.environ.get("CYDRA_BROWSER_CHANNEL", "chrome"),
-            headless=False,
-            args=["--start-maximized"],
-        )
+        launch_kwargs = {
+            "headless": False,
+            "args": ["--start-maximized"],
+        }
+        browser_channel = os.environ.get("CYDRA_BROWSER_CHANNEL", "").strip()
+        if browser_channel:
+            launch_kwargs["channel"] = browser_channel
+        browser = p.chromium.launch(**launch_kwargs)
         context = browser.new_context(viewport={"width": 1440, "height": 900})
         if header_value:
             context.set_extra_http_headers({header_name: header_value})
