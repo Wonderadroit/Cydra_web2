@@ -76,8 +76,9 @@ jobs:
             identity="$(echo "$identity" | xargs)"
             test -n "$identity" || exit 1
             name="cydra-browser-auth-$identity"
-            run_id="$(gh api --paginate "repos/$GITHUB_REPOSITORY/actions/artifacts?name=$name&per_page=100" --jq '.artifacts[] | select(.expired == false) | .workflow_run.id' | head -1)"
+            run_id="$(gh api --paginate "repos/$GITHUB_REPOSITORY/actions/artifacts?name=$name&per_page=100" --jq '.artifacts[] | select(.expired == false) | [.created_at, .workflow_run.id] | @tsv' | sort -r | head -1 | cut -f2)"
             test -n "$run_id" || (echo "No non-expired encrypted state artifact found for $identity" && exit 1)
+            echo "Selected newest non-expired authentication artifact for $identity from workflow run $run_id"
             mkdir -p "artifacts/auth-state/$identity"
             gh run download "$run_id" --repo "$GITHUB_REPOSITORY" --name "$name" --dir "artifacts/auth-state/$identity"
             find "artifacts/auth-state/$identity" -type f -maxdepth 3 -print
