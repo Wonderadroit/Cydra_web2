@@ -65,10 +65,6 @@ def main() -> int:
         "status": "anonymous observation only; ownership/authentication boundaries remain unresolved",
         "api_frontier": api_frontier,
         "observations": [
-            {"id": o.id, "endpoint": o.endpoint_id, "status_code": o.status_code, "identity_id": o.identity_id, "body_size": o.body_size, "fingerprint": o.body_fingerprint}
-            for o in result.observations
-        ],
-        "observations": [
             {"id": o.id, "endpoint": o.endpoint_id, "status_code": o.status_code, "identity_id": o.identity_id, "body_size": o.body_length, "fingerprint": o.body_sha256}
             for o in result.observations
         ],
