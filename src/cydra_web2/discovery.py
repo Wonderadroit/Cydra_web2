@@ -49,8 +49,8 @@ def _documents(body: str):
     docs=[]
     try: docs.append(json.loads(body))
     except (TypeError,json.JSONDecodeError): pass
-    for attrs, source in re.findall(r'<script\\b([^>]*)>(.*?)</script\\s*>', body, re.I|re.S):
-        if re.search(r'type\\s*=\\s*["\']application/json["\']', attrs, re.I):
+    for attrs, source in re.findall(r'<script\b([^>]*)>(.*?)</script\s*>', body, re.I|re.S):
+        if re.search(r'type\s*=\s*["\']application/json["\']', attrs, re.I):
             try: docs.append(json.loads(source))
             except (TypeError,json.JSONDecodeError): pass
     return docs
