@@ -327,8 +327,17 @@ def _bootstrap() -> None:
             # by itself is never enough. A successful XHR/fetch observed while
             # loading the configured verification route is the strongest generic
             # signal because it does not assume an API hostname or endpoint shape.
-            application_signal = bool(target_responses or route_ok or signed_in_ui)
-            confirmed = bool(application_signal and (auth_cookies or auth_storage or signed_in_ui))
+            # Do not accept a generic successful XHR/fetch as proof: public
+            # application traffic can be identical before and after login. The
+            # configured verification paths are explicitly operator-selected
+            # protected/read-only surfaces, so a successful non-login response
+            # is useful application evidence; persisted auth material is
+            # required unless the UI itself proves a signed-in state.
+            application_signal = bool(route_ok or signed_in_ui)
+            confirmed = bool(
+                signed_in_ui
+                or (route_ok and bool(auth_cookies or auth_storage))
+            )
 
             evidence = {
                 "confirmed": confirmed,
