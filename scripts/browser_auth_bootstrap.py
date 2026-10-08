@@ -154,6 +154,8 @@ def _bootstrap() -> None:
     auth_url = os.environ.get("CYDRA_AUTH_URL", "").strip() or target
     identity = os.environ.get("CYDRA_AUTH_IDENTITY", "").strip()
     wait_seconds = int(os.environ.get("CYDRA_AUTH_WAIT_SECONDS", "900"))
+    poll_seconds = max(1, int(os.environ.get("CYDRA_AUTH_POLL_SECONDS", "3")))
+    cdp_port = int(os.environ.get("CYDRA_AUTH_CDP_PORT", "9222"))
     if not target:
         raise ValueError("CYDRA_TARGET_URL is required")
     if not auth_url:
@@ -189,6 +191,8 @@ def _bootstrap() -> None:
             "--no-first-run",
             "--no-default-browser-check",
             "--start-maximized",
+            f"--remote-debugging-port={cdp_port}",
+            "--remote-allow-origins=*",
             auth_url,
         ],
         stdout=subprocess.DEVNULL,
@@ -202,10 +206,36 @@ def _bootstrap() -> None:
         print(f"Target: {target}")
         print(f"Authentication page: {auth_url}")
         print(f"Identity: {identity}")
-        print(f"Waiting up to {wait_seconds} seconds before verification.")
+        print(f"Waiting up to {wait_seconds} seconds for authentication; verification starts immediately when a strong completion signal appears.")
         deadline = time.time() + wait_seconds
-        while time.time() < deadline:
-            time.sleep(5)
+        early_signal = False
+        with sync_playwright() as poll_pw:
+            while time.time() < deadline:
+                try:
+                    poll_browser = poll_pw.chromium.connect_over_cdp(f"http://127.0.0.1:{cdp_port}")
+                    pages = [p for ctx in poll_browser.contexts for p in ctx.pages]
+                    for candidate in pages:
+                        try:
+                            body = candidate.locator("body").inner_text(timeout=1000)
+                        except Exception:
+                            body = ""
+                        body_lower = body.lower()
+                        signed_in = (
+                            not _login_surface(body)
+                            and any(marker in body_lower for marker in ("sign out", "log out", "logout", "disconnect", "my account"))
+                        )
+                        if signed_in:
+                            print("AUTHENTICATION COMPLETION SIGNAL: signed-in application UI detected; proceeding immediately.")
+                            early_signal = True
+                            break
+                    poll_browser.close()
+                except Exception:
+                    pass
+                if early_signal:
+                    break
+                time.sleep(poll_seconds)
+        if not early_signal:
+            print("AUTHENTICATION COMPLETION SIGNAL: timeout reached; proceeding to final verification.")
     finally:
         chrome.terminate()
         try:
@@ -273,25 +303,35 @@ def _bootstrap() -> None:
 
             verification_paths = _verification_paths(target)
             route_checks = []
+            # Compare each configured verification route with a fresh anonymous
+            # request. Auth cookies/storage alone are ambiguous if the route is public.
+            anonymous = p.chromium.launch(headless=True)
+            anonymous_context = anonymous.new_context(viewport={"width": 1440, "height": 900})
+            anonymous_page = anonymous_context.new_page()
+            anonymous_checks = {}
+            for path in verification_paths:
+                url = target.rstrip("/") + path
+                try:
+                    response = anonymous_page.goto(url, wait_until="domcontentloaded", timeout=30000)
+                    body = anonymous_page.locator("body").inner_text(timeout=5000)
+                    normalized = re.sub(r"\\s+", " ", body).strip().lower()
+                    anonymous_checks[path] = {"status": response.status if response else None, "final_url": anonymous_page.url, "title": anonymous_page.title(), "body_fingerprint": __import__("hashlib").sha256(normalized.encode()).hexdigest() if normalized else ""}
+                except Exception as exc:
+                    anonymous_checks[path] = {"error": type(exc).__name__}
+            anonymous_context.close()
+            anonymous.close()
             for path in verification_paths:
                 url = target.rstrip("/") + path
                 try:
                     response = page.goto(url, wait_until="domcontentloaded", timeout=30000)
                     body = page.locator("body").inner_text(timeout=5000)
-                    route_checks.append({
-                        "path": path,
-                        "status": response.status if response else None,
-                        "final_url": page.url,
-                        "login_surface": _login_surface(body),
-                        "title": page.title(),
-                    })
+                    normalized = re.sub(r"\\s+", " ", body).strip().lower()
+                    fingerprint = __import__("hashlib").sha256(normalized.encode()).hexdigest() if normalized else ""
+                    baseline = anonymous_checks.get(path, {})
+                    route_checks.append({"path": path, "status": response.status if response else None, "final_url": page.url, "login_surface": _login_surface(body), "title": page.title(), "body_fingerprint": fingerprint, "anonymous_baseline": baseline, "differs_from_anonymous": bool(baseline.get("status") != (response.status if response else None) or baseline.get("final_url") != page.url or baseline.get("title") != page.title() or baseline.get("body_fingerprint") != fingerprint)})
                     page.wait_for_timeout(1200)
                 except Exception as exc:
-                    route_checks.append({
-                        "path": path,
-                        "error": type(exc).__name__,
-                    })
-
+                    route_checks.append({"path": path, "error": type(exc).__name__})
             cookies = context.cookies()
             cookie_names = sorted({x["name"] for x in cookies})
             auth_cookies = _auth_names(cookie_names)
@@ -319,7 +359,9 @@ def _bootstrap() -> None:
                 if 200 <= x.get("status", 0) < 300 and x.get("resource_type") in {"xhr", "fetch"}
             ]
             route_ok = any(
-                x.get("status", 0) < 400 and not x.get("login_surface", True)
+                x.get("status", 0) < 400
+                and not x.get("login_surface", True)
+                and x.get("differs_from_anonymous", False)
                 for x in route_checks
             )
             # A real application session needs at least one application-level
@@ -327,8 +369,17 @@ def _bootstrap() -> None:
             # by itself is never enough. A successful XHR/fetch observed while
             # loading the configured verification route is the strongest generic
             # signal because it does not assume an API hostname or endpoint shape.
-            application_signal = bool(target_responses or route_ok or signed_in_ui)
-            confirmed = bool(application_signal and (auth_cookies or auth_storage or signed_in_ui))
+            # Do not accept a generic successful XHR/fetch as proof: public
+            # application traffic can be identical before and after login. The
+            # configured verification paths are explicitly operator-selected
+            # protected/read-only surfaces, so a successful non-login response
+            # is useful application evidence; persisted auth material is
+            # required unless the UI itself proves a signed-in state.
+            application_signal = bool(route_ok or signed_in_ui)
+            confirmed = bool(
+                signed_in_ui
+                or (route_ok and bool(auth_cookies or auth_storage))
+            )
 
             evidence = {
                 "confirmed": confirmed,

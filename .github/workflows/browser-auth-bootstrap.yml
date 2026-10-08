@@ -79,8 +79,8 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y xvfb x11vnc novnc openbox x11-utils
           python -m playwright install --with-deps chromium
-          curl -fsSL https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb -o /tmp/google-chrome.deb
-          sudo apt-get install -y /tmp/google-chrome.deb
+          chromium_path=$(python -c "from playwright.sync_api import sync_playwright; p=sync_playwright().start(); print(p.chromium.executable_path); p.stop()")
+          echo "CYDRA_CHROME_BINARY=$chromium_path" >> "$GITHUB_ENV"
 
       - name: Run deterministic authentication regression
         if: ${{ github.event_name == 'pull_request' || inputs.mode == 'self-test' }}
