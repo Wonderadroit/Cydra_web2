@@ -262,7 +262,7 @@ def _bootstrap() -> None:
                         body_lower = body.lower()
                         signed_in = (
                             not _login_surface(body)
-                            and any(marker in body_lower for marker in ("sign out", "log out", "logout", "disconnect", "my account"))
+                            and any(marker in body_lower for marker in ("sign out", "log out", "logout"))
                         )
                         if signed_in:
                             print("AUTHENTICATION COMPLETION SIGNAL: signed-in application UI detected; proceeding immediately.")
