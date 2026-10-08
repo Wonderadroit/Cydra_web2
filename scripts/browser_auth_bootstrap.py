@@ -303,25 +303,35 @@ def _bootstrap() -> None:
 
             verification_paths = _verification_paths(target)
             route_checks = []
+            # Compare each configured verification route with a fresh anonymous
+            # request. Auth cookies/storage alone are ambiguous if the route is public.
+            anonymous = p.chromium.launch(headless=True)
+            anonymous_context = anonymous.new_context(viewport={"width": 1440, "height": 900})
+            anonymous_page = anonymous_context.new_page()
+            anonymous_checks = {}
+            for path in verification_paths:
+                url = target.rstrip("/") + path
+                try:
+                    response = anonymous_page.goto(url, wait_until="domcontentloaded", timeout=30000)
+                    body = anonymous_page.locator("body").inner_text(timeout=5000)
+                    normalized = re.sub(r"\\s+", " ", body).strip().lower()
+                    anonymous_checks[path] = {"status": response.status if response else None, "final_url": anonymous_page.url, "title": anonymous_page.title(), "body_fingerprint": __import__("hashlib").sha256(normalized.encode()).hexdigest() if normalized else ""}
+                except Exception as exc:
+                    anonymous_checks[path] = {"error": type(exc).__name__}
+            anonymous_context.close()
+            anonymous.close()
             for path in verification_paths:
                 url = target.rstrip("/") + path
                 try:
                     response = page.goto(url, wait_until="domcontentloaded", timeout=30000)
                     body = page.locator("body").inner_text(timeout=5000)
-                    route_checks.append({
-                        "path": path,
-                        "status": response.status if response else None,
-                        "final_url": page.url,
-                        "login_surface": _login_surface(body),
-                        "title": page.title(),
-                    })
+                    normalized = re.sub(r"\\s+", " ", body).strip().lower()
+                    fingerprint = __import__("hashlib").sha256(normalized.encode()).hexdigest() if normalized else ""
+                    baseline = anonymous_checks.get(path, {})
+                    route_checks.append({"path": path, "status": response.status if response else None, "final_url": page.url, "login_surface": _login_surface(body), "title": page.title(), "body_fingerprint": fingerprint, "anonymous_baseline": baseline, "differs_from_anonymous": bool(baseline.get("status") != (response.status if response else None) or baseline.get("final_url") != page.url or baseline.get("title") != page.title() or baseline.get("body_fingerprint") != fingerprint)})
                     page.wait_for_timeout(1200)
                 except Exception as exc:
-                    route_checks.append({
-                        "path": path,
-                        "error": type(exc).__name__,
-                    })
-
+                    route_checks.append({"path": path, "error": type(exc).__name__})
             cookies = context.cookies()
             cookie_names = sorted({x["name"] for x in cookies})
             auth_cookies = _auth_names(cookie_names)
@@ -349,7 +359,9 @@ def _bootstrap() -> None:
                 if 200 <= x.get("status", 0) < 300 and x.get("resource_type") in {"xhr", "fetch"}
             ]
             route_ok = any(
-                x.get("status", 0) < 400 and not x.get("login_surface", True)
+                x.get("status", 0) < 400
+                and not x.get("login_surface", True)
+                and x.get("differs_from_anonymous", False)
                 for x in route_checks
             )
             # A real application session needs at least one application-level
