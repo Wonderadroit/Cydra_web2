@@ -1,6 +1,8 @@
 name: Web2 interactive browser authentication
 
 on:
+  push:
+    branches: [ops/auth-bootstrap-once-20261009]
   pull_request:
     paths:
       - "scripts/browser_auth_bootstrap.py"
@@ -54,10 +56,10 @@ jobs:
     env:
       CYDRA_AUTH_ENCRYPTION_KEY: ${{ secrets.CYDRA_AUTH_ENCRYPTION_KEY }}
       CYDRA_VNC_PASSWORD: ${{ secrets.CYDRA_VNC_PASSWORD }}
-      CYDRA_TARGET_URL: ${{ inputs.target_url }}
-      CYDRA_AUTH_URL: ${{ inputs.auth_url }}
-      CYDRA_AUTH_VERIFY_PATHS: ${{ inputs.verification_paths }}
-      CYDRA_AUTH_IDENTITY: ${{ inputs.identity_id }}
+      CYDRA_TARGET_URL: ${{ inputs.target_url || 'https://app.aurory.io' }}
+      CYDRA_AUTH_URL: ${{ inputs.auth_url || inputs.target_url || 'https://app.aurory.io' }}
+      CYDRA_AUTH_VERIFY_PATHS: ${{ inputs.verification_paths || '/profile,/profile/inventory' }}
+      CYDRA_AUTH_IDENTITY: ${{ inputs.identity_id || 'aurory-a' }}
       CYDRA_BUG_BOUNTY_HEADER: "Bugcrowd-cyberwonder"
       CYDRA_CHROME_BINARY: "/usr/bin/google-chrome"
     steps:
@@ -87,7 +89,7 @@ jobs:
         run: python scripts/browser_auth_bootstrap.py --self-test
 
       - name: Validate interactive secret configuration
-        if: ${{ inputs.mode == 'bootstrap' }}
+        if: ${{ github.event_name == 'push' || inputs.mode == 'bootstrap' }}
         run: |
           test -n "$CYDRA_AUTH_ENCRYPTION_KEY" || (echo "CYDRA_AUTH_ENCRYPTION_KEY is required" && exit 1)
           test -n "$CYDRA_VNC_PASSWORD" || (echo "CYDRA_VNC_PASSWORD is required" && exit 1)
@@ -99,7 +101,7 @@ jobs:
           test -n "$CYDRA_AUTH_VERIFY_PATHS" || (echo "CYDRA_AUTH_VERIFY_PATHS is required for bootstrap" && exit 1)
 
       - name: Start virtual desktop
-        if: ${{ inputs.mode == 'bootstrap' }}
+        if: ${{ github.event_name == 'push' || inputs.mode == 'bootstrap' }}
         run: |
           set -euo pipefail
           export DISPLAY=:99
@@ -132,7 +134,7 @@ jobs:
           echo "noVNC HTTP frontend is healthy on 127.0.0.1:6080"
 
       - name: Start temporary remote access tunnel
-        if: ${{ inputs.mode == 'bootstrap' }}
+        if: ${{ github.event_name == 'push' || inputs.mode == 'bootstrap' }}
         run: |
           set -euo pipefail
           curl -fsSL https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -o /tmp/cloudflared
@@ -164,10 +166,10 @@ jobs:
           echo "VNC password: use the exact 8-character CYDRA_VNC_PASSWORD configured for this repository/environment."
 
       - name: Capture interactive authentication state
-        if: ${{ inputs.mode == 'bootstrap' }}
+        if: ${{ github.event_name == 'push' || inputs.mode == 'bootstrap' }}
         env:
           DISPLAY: :99
-          CYDRA_AUTH_WAIT_MINUTES: ${{ inputs.wait_minutes }}
+          CYDRA_AUTH_WAIT_MINUTES: ${{ inputs.wait_minutes || '15' }}
         run: |
           export CYDRA_AUTH_WAIT_SECONDS=$((CYDRA_AUTH_WAIT_MINUTES * 60))
           echo "ACTION REQUIRED: Open the REMOTE BROWSER URL from the job summary/notice."
@@ -175,10 +177,10 @@ jobs:
           python scripts/browser_auth_bootstrap.py --bootstrap
 
       - name: Upload encrypted authentication state
-        if: ${{ inputs.mode == 'bootstrap' }}
+        if: ${{ github.event_name == 'push' || inputs.mode == 'bootstrap' }}
         uses: actions/upload-artifact@v4
         with:
-          name: cydra-browser-auth-${{ inputs.identity_id }}
+          name: cydra-browser-auth-${{ inputs.identity_id || 'aurory-a' }}
           path: artifacts/browser-auth/*.encrypted
           retention-days: 7
           if-no-files-found: error
