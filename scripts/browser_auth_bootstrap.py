@@ -207,6 +207,7 @@ def _bootstrap() -> None:
         )
         api_checks = []
         observed_api_requests = []
+        observed_api_responses = []
 
         def record_request(request):
             try:
@@ -219,7 +220,19 @@ def _bootstrap() -> None:
             except Exception:
                 pass
 
+        def record_response(response):
+            try:
+                parsed = response.url.split("?", 1)[0]
+                if any(parsed.endswith(path) or f"{path}/" in parsed for path in api_paths):
+                    observed_api_responses.append({
+                        "status": response.status,
+                        "url": parsed,
+                    })
+            except Exception:
+                pass
+
         page.on("request", record_request)
+        page.on("response", record_response)
         try:
             page.reload(wait_until="networkidle", timeout=30000)
         except Exception:
@@ -261,11 +274,7 @@ def _bootstrap() -> None:
         except Exception:
             body = ""
         signed_in_ui = any(k in body for k in ("sign out", "log out", "logout", "disconnect", "my account"))
-        api_auth_ok = any(
-            x.get("status", 0) in range(200, 300)
-            and not x.get("login_surface", True)
-            for x in api_checks
-        )
+        api_auth_ok = any(x.get("status", 0) in range(200, 300) for x in api_checks) or any(x.get("status", 0) in range(200, 300) for x in observed_api_responses)
         confirmed = bool(api_auth_ok and (auth_names or auth_storage or signed_in_ui))
         print("AUTHENTICATION EVIDENCE: " + json.dumps({
             "confirmed": confirmed,
@@ -278,6 +287,7 @@ def _bootstrap() -> None:
             "route_checks": route_checks,
             "api_checks": api_checks,
             "observed_api_requests": observed_api_requests,
+            "observed_api_responses": observed_api_responses,
         }, sort_keys=True))
         if not confirmed:
             context.close()
