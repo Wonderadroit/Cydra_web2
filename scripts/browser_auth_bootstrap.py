@@ -377,9 +377,17 @@ def _bootstrap() -> None:
                 x for x in observed_api_responses
                 if 200 <= x.get("status", 0) < 300 and x.get("resource_type") in {"xhr", "fetch"}
             ]
+            target_origin = urlparse(target)
             route_ok = any(
                 x.get("status", 0) < 400
                 and not x.get("login_surface", True)
+                # A blank/failed client render is not application proof. Require
+                # non-empty content on both sides before comparing fingerprints.
+                and bool(x.get("body_fingerprint"))
+                and bool(x.get("anonymous_baseline", {}).get("body_fingerprint"))
+                # Only accept an actual target-origin route, not an SSO redirect.
+                and (urlparse(x.get("final_url", "")).scheme, urlparse(x.get("final_url", "")).netloc)
+                    == (target_origin.scheme, target_origin.netloc)
                 and x.get("differs_from_anonymous", False)
                 for x in route_checks
             )
