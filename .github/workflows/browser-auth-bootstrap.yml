@@ -26,6 +26,11 @@ on:
         required: false
         default: "https://app.aurory.io"
         type: string
+      verification_paths:
+        description: "Comma-separated protected/read-only application paths used to prove the session"
+        required: false
+        default: "/profile,/profile/inventory"
+        type: string
       identity_id:
         description: "Identity label to store"
         required: false
@@ -51,6 +56,7 @@ jobs:
       CYDRA_VNC_PASSWORD: ${{ secrets.CYDRA_VNC_PASSWORD }}
       CYDRA_TARGET_URL: ${{ inputs.target_url }}
       CYDRA_AUTH_URL: ${{ inputs.auth_url }}
+      CYDRA_AUTH_VERIFY_PATHS: ${{ inputs.verification_paths }}
       CYDRA_AUTH_IDENTITY: ${{ inputs.identity_id }}
       CYDRA_BUG_BOUNTY_HEADER: "Bugcrowd-cyberwonder"
       CYDRA_CHROME_BINARY: "/usr/bin/google-chrome"
@@ -90,6 +96,7 @@ jobs:
             echo "Update the repository/environment secret, then rerun this workflow."
             exit 1
           fi
+          test -n "$CYDRA_AUTH_VERIFY_PATHS" || (echo "CYDRA_AUTH_VERIFY_PATHS is required for bootstrap" && exit 1)
 
       - name: Start virtual desktop
         if: ${{ inputs.mode == 'bootstrap' }}
@@ -148,7 +155,7 @@ jobs:
             echo
             echo "[$remote_url]($remote_url)"
             echo
-            echo "Tap the link, connect to the VNC session, and sign in on the authentication page. Google authentication happens in a normal browser process; CYDRA only attaches after this waiting phase."
+            echo "Tap the link, connect to the VNC session, and sign in on the authentication page."
             echo
             echo "The link is temporary and expires when the job ends."
           } >> "$GITHUB_STEP_SUMMARY"
@@ -163,7 +170,8 @@ jobs:
           CYDRA_AUTH_WAIT_MINUTES: ${{ inputs.wait_minutes }}
         run: |
           export CYDRA_AUTH_WAIT_SECONDS=$((CYDRA_AUTH_WAIT_MINUTES * 60))
-          echo "ACTION REQUIRED: Open the REMOTE BROWSER URL from the job summary/notice. The browser will already be on the configured authentication page. The browser will NOT open automatically on your phone."
+          echo "ACTION REQUIRED: Open the REMOTE BROWSER URL from the job summary/notice."
+          echo "After sign-in, CYDRA will verify the configured protected paths and observed application requests before creating encrypted state."
           python scripts/browser_auth_bootstrap.py --bootstrap
 
       - name: Upload encrypted authentication state
