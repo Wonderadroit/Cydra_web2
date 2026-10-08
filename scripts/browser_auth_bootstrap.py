@@ -247,35 +247,14 @@ def _bootstrap() -> None:
         print(f"Authentication page: {auth_url}")
         print(f"Identity: {identity}")
         print(f"Waiting up to {wait_seconds} seconds for authentication; verification starts immediately when a strong completion signal appears.")
+        # UI text alone is not a completion signal. Auth/SSO pages can transiently
+        # render application-looking text before redirecting back to the login wall.
+        # Always wait for the operator-controlled timeout and let the final verifier
+        # perform the authoritative anonymous differential check.
         deadline = time.time() + wait_seconds
-        early_signal = False
-        with sync_playwright() as poll_pw:
-            while time.time() < deadline:
-                try:
-                    poll_browser = poll_pw.chromium.connect_over_cdp(f"http://127.0.0.1:{cdp_port}")
-                    pages = [p for ctx in poll_browser.contexts for p in ctx.pages]
-                    for candidate in pages:
-                        try:
-                            body = candidate.locator("body").inner_text(timeout=1000)
-                        except Exception:
-                            body = ""
-                        body_lower = body.lower()
-                        signed_in = (
-                            not _login_surface(body)
-                            and any(marker in body_lower for marker in ("sign out", "log out", "logout"))
-                        )
-                        if signed_in:
-                            print("AUTHENTICATION COMPLETION SIGNAL: signed-in application UI detected; proceeding immediately.")
-                            early_signal = True
-                            break
-                    poll_browser.close()
-                except Exception:
-                    pass
-                if early_signal:
-                    break
-                time.sleep(poll_seconds)
-        if not early_signal:
-            print("AUTHENTICATION COMPLETION SIGNAL: timeout reached; proceeding to final verification.")
+        while time.time() < deadline:
+            time.sleep(poll_seconds)
+        print("AUTHENTICATION COMPLETION SIGNAL: timeout reached; proceeding to final verification.")
     finally:
         chrome.terminate()
         try:
