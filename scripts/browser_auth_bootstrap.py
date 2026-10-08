@@ -184,6 +184,11 @@ def _bootstrap() -> None:
     if not chrome_binary:
         raise RuntimeError("No supported Chrome/Chromium binary found")
 
+    # Keep browser diagnostics visible. A silent Chrome crash used to leave the
+    # operator with a working VNC/noVNC surface but no browser window.
+    browser_log = Path("/tmp/cydra-chrome.log")
+    browser_env = os.environ.copy()
+    browser_env.setdefault("DISPLAY", ":99")
     chrome = subprocess.Popen(
         [
             chrome_binary,
@@ -191,13 +196,48 @@ def _bootstrap() -> None:
             "--no-first-run",
             "--no-default-browser-check",
             "--start-maximized",
+            "--no-sandbox",
+            "--disable-dev-shm-usage",
             f"--remote-debugging-port={cdp_port}",
             "--remote-allow-origins=*",
             auth_url,
         ],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
+        env=browser_env,
+        stdout=browser_log.open("w"),
+        stderr=subprocess.STDOUT,
     )
+
+    # Do not announce the remote browser until the actual GUI browser and its
+    # CDP endpoint are alive. This prevents the operator from entering VNC
+    # credentials into a desktop that contains no browser.
+    print(f"Browser binary: {chrome_binary}")
+    print(f"Browser PID: {chrome.pid}")
+    print(f"DISPLAY: {browser_env.get('DISPLAY', '')}")
+    cdp_ready = False
+    cdp_deadline = time.time() + 30
+    while time.time() < cdp_deadline:
+        if chrome.poll() is not None:
+            print(f"Chrome exited before becoming ready (exit={chrome.returncode}).")
+            if browser_log.exists():
+                print("CHROME STARTUP LOG:")
+                print(browser_log.read_text(errors="replace")[-12000:])
+            raise RuntimeError("INTERACTIVE_BROWSER_START_FAILED: Chrome exited before CDP became ready")
+        try:
+            import urllib.request
+            with urllib.request.urlopen(f"http://127.0.0.1:{cdp_port}/json/version", timeout=2) as response:
+                if response.status == 200:
+                    cdp_ready = True
+                    break
+        except Exception:
+            pass
+        time.sleep(1)
+
+    if not cdp_ready:
+        print("Chrome process is alive but CDP did not become ready within 30 seconds.")
+        if browser_log.exists():
+            print("CHROME STARTUP LOG:")
+            print(browser_log.read_text(errors="replace")[-12000:])
+        raise RuntimeError("INTERACTIVE_BROWSER_START_FAILED: CDP endpoint was not ready")
 
     try:
         print("INTERACTIVE AUTHENTICATION READY")
