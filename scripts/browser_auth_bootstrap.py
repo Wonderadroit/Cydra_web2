@@ -154,6 +154,8 @@ def _bootstrap() -> None:
     auth_url = os.environ.get("CYDRA_AUTH_URL", "").strip() or target
     identity = os.environ.get("CYDRA_AUTH_IDENTITY", "").strip()
     wait_seconds = int(os.environ.get("CYDRA_AUTH_WAIT_SECONDS", "900"))
+    poll_seconds = max(1, int(os.environ.get("CYDRA_AUTH_POLL_SECONDS", "3")))
+    cdp_port = int(os.environ.get("CYDRA_AUTH_CDP_PORT", "9222"))
     if not target:
         raise ValueError("CYDRA_TARGET_URL is required")
     if not auth_url:
@@ -189,6 +191,8 @@ def _bootstrap() -> None:
             "--no-first-run",
             "--no-default-browser-check",
             "--start-maximized",
+            f"--remote-debugging-port={cdp_port}",
+            "--remote-allow-origins=*",
             auth_url,
         ],
         stdout=subprocess.DEVNULL,
@@ -202,10 +206,36 @@ def _bootstrap() -> None:
         print(f"Target: {target}")
         print(f"Authentication page: {auth_url}")
         print(f"Identity: {identity}")
-        print(f"Waiting up to {wait_seconds} seconds before verification.")
+        print(f"Waiting up to {wait_seconds} seconds for authentication; verification starts immediately when a strong completion signal appears.")
         deadline = time.time() + wait_seconds
-        while time.time() < deadline:
-            time.sleep(5)
+        early_signal = False
+        with sync_playwright() as poll_pw:
+            while time.time() < deadline:
+                try:
+                    poll_browser = poll_pw.chromium.connect_over_cdp(f"http://127.0.0.1:{cdp_port}")
+                    pages = [p for ctx in poll_browser.contexts for p in ctx.pages]
+                    for candidate in pages:
+                        try:
+                            body = candidate.locator("body").inner_text(timeout=1000)
+                        except Exception:
+                            body = ""
+                        body_lower = body.lower()
+                        signed_in = (
+                            not _login_surface(body)
+                            and any(marker in body_lower for marker in ("sign out", "log out", "logout", "disconnect", "my account"))
+                        )
+                        if signed_in:
+                            print("AUTHENTICATION COMPLETION SIGNAL: signed-in application UI detected; proceeding immediately.")
+                            early_signal = True
+                            break
+                    poll_browser.close()
+                except Exception:
+                    pass
+                if early_signal:
+                    break
+                time.sleep(poll_seconds)
+        if not early_signal:
+            print("AUTHENTICATION COMPLETION SIGNAL: timeout reached; proceeding to final verification.")
     finally:
         chrome.terminate()
         try:
