@@ -174,35 +174,83 @@ def _bootstrap() -> None:
         except Exception:
             storage_keys = []
         auth_storage = [n for n in storage_keys if any(k in n.lower() for k in ("auth", "session", "sess", "token", "sid", "jwt", "user", "account"))]
-        # A provider cookie/local-storage key is not sufficient: it can survive after
-        # the application session has expired. Verify an authenticated application
-        # route and require that it stays on an in-scope page instead of returning
-        # the login surface.
-        base = target.rstrip("/")
-        verification_paths = ("/profile", "/profile/inventory")
-        route_checks = []
-        for path in verification_paths:
+        # Provider cookies/storage are supporting evidence only. The decisive
+        # signal is a successful read-only request to an application API surface.
+        # Aurory's HTML profile routes can legitimately render the login shell even
+        # when the browser has completed the FusionAuth flow, so HTML-only checks
+        # falsely rejected real sessions.
+        api_paths = (
+            "/v1/me",
+            "/v1/inventories",
+            "/v1/avatars",
+            "/v1/player-avatar-inventory",
+            "/v1/player-matches",
+            "/v1/notifications",
+            "/v2/inventories",
+            "/v2/players",
+        )
+        api_checks = []
+        observed_api_requests = []
+
+        def record_request(request):
             try:
-                probe = context.request.get(base + path, timeout=15000, headers={header_name: header_value} if header_value else None)
-                text = (probe.text() or "").lower()
-                route_checks.append({
+                parsed = request.url.split("?", 1)[0]
+                if any(parsed.endswith(path) or f"{path}/" in parsed for path in api_paths):
+                    observed_api_requests.append({
+                        "method": request.method,
+                        "url": parsed,
+                    })
+            except Exception:
+                pass
+
+        page.on("request", record_request)
+        try:
+            page.reload(wait_until="networkidle", timeout=30000)
+        except Exception:
+            try:
+                page.reload(wait_until="domcontentloaded", timeout=30000)
+            except Exception:
+                pass
+        page.wait_for_timeout(1500)
+
+        for path in api_paths:
+            try:
+                probe = context.request.get(
+                    base + path,
+                    timeout=15000,
+                    headers={header_name: header_value} if header_value else None,
+                )
+                text_body = (probe.text() or "").lower()
+                login_surface = any(
+                    k in text_body
+                    for k in (
+                        "sign in to aurory",
+                        "log in to aurory",
+                        "sign in",
+                        "log in",
+                        "unauthorized",
+                    )
+                )
+                api_checks.append({
                     "path": path,
                     "status": probe.status,
                     "final_url": probe.url,
-                    "login_surface": any(k in text for k in ("sign in to aurory", "log in to aurory", "sign in", "log in")),
+                    "login_surface": login_surface,
                 })
             except Exception as exc:
-                route_checks.append({"path": path, "error": type(exc).__name__})
+                api_checks.append({"path": path, "error": type(exc).__name__})
+
         try:
             body = page.locator("body").inner_text(timeout=3000).lower()
         except Exception:
             body = ""
         signed_in_ui = any(k in body for k in ("sign out", "log out", "logout", "disconnect", "my account"))
-        protected_route_ok = any(
-            x.get("status", 0) < 400 and not x.get("login_surface", True)
-            for x in route_checks
+        api_auth_ok = any(
+            x.get("status", 0) in range(200, 300)
+            and not x.get("login_surface", True)
+            for x in api_checks
         )
-        confirmed = bool(protected_route_ok and (auth_names or auth_storage or signed_in_ui))
+        confirmed = bool(api_auth_ok and (auth_names or auth_storage or signed_in_ui))
         print("AUTHENTICATION EVIDENCE: " + json.dumps({
             "confirmed": confirmed,
             "url": page.url,
@@ -211,7 +259,7 @@ def _bootstrap() -> None:
             "auth_storage_keys": auth_storage,
             "signed_in_ui": signed_in_ui,
             "protected_route_ok": protected_route_ok,
-            "route_checks": route_checks,
+            "route_checks": route_checks,\n            "api_checks": api_checks,\n            "observed_api_requests": observed_api_requests,
         }, sort_keys=True))
         if not confirmed:
             context.close()
