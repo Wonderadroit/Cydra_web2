@@ -174,6 +174,22 @@ def _bootstrap() -> None:
         except Exception:
             storage_keys = []
         auth_storage = [n for n in storage_keys if any(k in n.lower() for k in ("auth", "session", "sess", "token", "sid", "jwt", "user", "account"))]
+        base = target.rstrip("/")
+        verification_paths = ("/profile", "/profile/inventory")
+        route_checks = []
+        for path in verification_paths:
+            try:
+                probe = context.request.get(base + path, timeout=15000, headers={header_name: header_value} if header_value else None)
+                text_body = (probe.text() or "").lower()
+                route_checks.append({
+                    "path": path,
+                    "status": probe.status,
+                    "final_url": probe.url,
+                    "login_surface": any(k in text_body for k in ("sign in to aurory", "log in to aurory", "sign in", "log in")),
+                })
+            except Exception as exc:
+                route_checks.append({"path": path, "error": type(exc).__name__})
+
         # Provider cookies/storage are supporting evidence only. The decisive
         # signal is a successful read-only request to an application API surface.
         # Aurory's HTML profile routes can legitimately render the login shell even
@@ -259,7 +275,9 @@ def _bootstrap() -> None:
             "auth_storage_keys": auth_storage,
             "signed_in_ui": signed_in_ui,
             "protected_route_ok": protected_route_ok,
-            "route_checks": route_checks,\n            "api_checks": api_checks,\n            "observed_api_requests": observed_api_requests,
+            "route_checks": route_checks,
+            "api_checks": api_checks,
+            "observed_api_requests": observed_api_requests,
         }, sort_keys=True))
         if not confirmed:
             context.close()
