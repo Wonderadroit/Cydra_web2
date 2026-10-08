@@ -275,7 +275,7 @@ def _bootstrap() -> None:
             body = ""
         signed_in_ui = any(k in body for k in ("sign out", "log out", "logout", "disconnect", "my account"))
         api_auth_ok = any(x.get("status", 0) in range(200, 300) for x in api_checks) or any(x.get("status", 0) in range(200, 300) for x in observed_api_responses)
-        confirmed = bool(api_auth_ok and (auth_names or auth_storage or signed_in_ui))
+        protected_route_ok = any(\n            x.get("status", 0) < 400 and not x.get("login_surface", True)\n            for x in route_checks\n        )\n        confirmed = bool(api_auth_ok and (auth_names or auth_storage or signed_in_ui))
         print("AUTHENTICATION EVIDENCE: " + json.dumps({
             "confirmed": confirmed,
             "url": page.url,
