@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import secrets
 import subprocess
 import tempfile
@@ -60,7 +61,13 @@ def decrypt_state(bundle_path: Path, output_path: Path) -> None:
 
 def _login_surface(text: str) -> bool:
     body = (text or "").lower()
-    return any(marker in body for marker in LOGIN_MARKERS)
+    # Match login/authentication indicators as words or phrases. In particular,
+    # do not treat normal authenticated application copy such as
+    # "authenticated" as a login wall merely because it contains "authenticate".
+    return any(
+        re.search(rf"(?<![a-z]){re.escape(marker)}(?![a-z])", body)
+        for marker in LOGIN_MARKERS
+    )
 
 
 def _auth_names(names: list[str]) -> list[str]:
