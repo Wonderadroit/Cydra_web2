@@ -86,3 +86,24 @@ def test_discovery_prioritizes_recovered_api_routes_over_static_assets():
     result = discover(Adapter(), m, seeds=("/app.js",), max_paths=3, max_js_bundles=1)
     assert calls[:2] == ["/app.js", "/v1/me"]
     assert result.resource_ids
+
+
+def test_discovery_does_not_reuse_previous_bundle_analysis_after_cap():
+    from types import SimpleNamespace
+    from cydra_web2.discovery import discover
+
+    calls = []
+    class Adapter:
+        def request(self, *, method, path, identity_id=None):
+            calls.append(path)
+            body = 'axios.post("/v1/session");' if path == "/first.js" else 'const route = buildRoute("/private");'
+            return SimpleNamespace(
+                identity_id=identity_id, status_code=200, body=body,
+                body_sha256="b" * 64, headers={"Content-Type": "application/javascript"},
+            )
+
+    model = TargetModel("https://authorized.example")
+    discover(Adapter(), model, seeds=("/first.js", "/second.js"), max_paths=3, max_js_bundles=1)
+    # The second bundle is outside the analysis budget and must not inherit the
+    # first bundle's reconstructed POST route as if it belonged to itself.
+    assert calls.count("/v1/session") <= 1
