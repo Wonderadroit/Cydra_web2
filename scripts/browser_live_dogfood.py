@@ -8,6 +8,7 @@ from cydra_web2.adapter import HttpAdapter, IdentitySession
 from cydra_web2.discovery import discover
 from cydra_web2.live_config import LiveDogfoodConfig
 from cydra_web2.identity_diff import identity_differentials
+from cydra_web2.scope import check_scope
 
 
 def _states():
@@ -52,7 +53,9 @@ def main():
             network=[]
             auth_headers={}
             def on_request(request):
-                if not request.url.startswith(config.target.base_url):
+                # Match the parsed hostname against the explicit allowlist; string-prefix checks
+                # can mistake https://app.aurory.io.attacker.invalid for the target origin.
+                if not check_scope(request.url, config.target.allowed_hosts, ("https",)).allowed:
                     return
                 network.append({
                     "url": request.url,
