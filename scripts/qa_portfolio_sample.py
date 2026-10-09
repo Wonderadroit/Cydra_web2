@@ -297,7 +297,7 @@ def main() -> int:
             "browser_version": browser_version,
             "viewports": VIEWPORTS,
             "mobile_note": "Mobile coverage is a 390x844 narrow viewport only; touch interaction and physical-device behavior are not certified.",
-            "test_harness_adjustments": ["The known legacy analytics request was blocked because it is unrelated to the tested controls and has shown upstream instability. Live HTML, CSS, jQuery, Foundation, and application behavior remain from the target; analytics delivery itself is not assessed."],
+            "test_harness_adjustments": ["No target requests are intercepted; the browser runs with the target’s normal request behavior. Failed requests and runtime errors are recorded as observations."],
         },
         "summary": {"total": len(results), "passed": passed, "failed": failed},
         "tests": results,
@@ -408,7 +408,7 @@ def main() -> int:
         "",
         report["interpretation"],
         "",
-        "This is a sample automation run, not a claim of paid client experience. The narrow viewport is a responsive-layout check only; it does not certify touch behavior or physical devices. Only the known legacy analytics request was blocked because it is unrelated to the tested controls and has shown upstream instability. Live page HTML, CSS, jQuery, Foundation, and application behavior remain from the target; analytics delivery itself is not assessed. Any failure must be independently reproduced and assessed for user impact before being described as a defect.",
+        "This is a sample automation run, not a claim of paid client experience. The narrow viewport is a responsive-layout check only; it does not certify touch behavior or physical devices. No target requests are intercepted; failed requests and runtime errors are recorded as observations. Any failure must be independently reproduced and assessed for user impact before being described as a defect.",
         "",
     ])
     (OUT / "report.md").write_text("\n".join(lines), encoding="utf-8")
@@ -487,7 +487,7 @@ def main() -> int:
     <h2>Test results</h2><table class="results-table"><thead><tr><th>ID</th><th>Test</th><th>Status</th><th>Result in plain English</th></tr></thead><tbody>{result_rows}</tbody></table>
     <h2>Evidence screenshots</h2>{''.join(image_sections)}
     <h2>Interpretation and limitations</h2><p>{html.escape(report['interpretation'])}</p>
-    <p>Narrow-viewport coverage is responsive-layout testing only; touch behavior and physical devices are not certified. Only the known legacy analytics request was blocked because it is unrelated to the tested controls and has shown upstream instability. Live page HTML, CSS, jQuery, Foundation, and application behavior remain from the target; analytics delivery itself is not assessed. A failed test is a discrepancy requiring triage, not automatically a defect or security finding. Runtime errors are context only.</p>
+    <p>Narrow-viewport coverage is responsive-layout testing only; touch behavior and physical devices are not certified. No target requests are intercepted; failed requests and runtime errors are recorded as observations. A failed test is a discrepancy requiring triage, not automatically a defect or security finding. Runtime errors are context only.</p>
     </body></html>"""
     with sync_playwright() as p:
         pdf_browser = p.chromium.launch(headless=True)
