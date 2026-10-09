@@ -157,7 +157,6 @@ def main() -> int:
                 try:
                     test1["diagnostics"] = {
                         "final_url": page.url,
-                        "title": page.title(),
                         "body_text_excerpt": page.locator("body").inner_text(timeout=3000)[:2000],
                         "body_html_excerpt": page.locator("body").inner_html(timeout=3000)[:4000],
                     }
@@ -239,7 +238,6 @@ def main() -> int:
                 try:
                     test2["diagnostics"] = {
                         "final_url": page.url,
-                        "title": page.title(),
                         "body_text_excerpt": page.locator("body").inner_text(timeout=3000)[:2000],
                         "body_html_excerpt": page.locator("body").inner_html(timeout=3000)[:4000],
                     }
