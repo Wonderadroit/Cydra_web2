@@ -18,10 +18,14 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install browser automation
+        timeout-minutes: 5
         run: |
           python -m pip install -e ".[browser]"
-          python -m playwright install --with-deps chromium
+          # Use the pre-provisioned Ubuntu browser libraries; avoid apt dependency
+          # installation here, which can stall independently of the QA runner.
+          python -m playwright install chromium
       - name: Run desktop and narrow-viewport functional checks
+        timeout-minutes: 5
         run: python scripts/qa_portfolio_sample.py
       - name: Upload report, JSON observations, and screenshots
         if: always()
