@@ -180,7 +180,7 @@ jobs:
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'bootstrap' }}
         uses: actions/upload-artifact@v4
         with:
-          name: cydra-browser-auth-${{ inputs.identity_id || 'aurory-a' }}
+          name: cydra-browser-auth-v2-${{ inputs.identity_id || 'aurory-a' }}
           path: artifacts/browser-auth/*.encrypted
           retention-days: 7
           if-no-files-found: error
