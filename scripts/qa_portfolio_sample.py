@@ -274,7 +274,9 @@ def main() -> int:
             }
             test1["runtime_observations"] = runtime
             test2["runtime_observations"] = runtime
-            context.close()
+            # Do not close a possibly unresponsive per-viewport context here: a stalled
+            # third-party renderer can hang context.close(). The browser teardown below
+            # closes every context in one operation before report generation.
         browser.close()
 
     ended = utc_now()
