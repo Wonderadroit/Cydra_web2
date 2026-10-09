@@ -333,7 +333,7 @@ def _bootstrap() -> None:
                 try:
                     response = anonymous_page.goto(url, wait_until="domcontentloaded", timeout=30000)
                     body = anonymous_page.locator("body").inner_text(timeout=5000)
-                    normalized = re.sub(r"\\s+", " ", body).strip().lower()
+                    normalized = re.sub(r"\s+", " ", body).strip().lower()
                     anonymous_checks[path] = {"status": response.status if response else None, "final_url": anonymous_page.url, "title": anonymous_page.title(), "body_fingerprint": __import__("hashlib").sha256(normalized.encode()).hexdigest() if normalized else ""}
                 except Exception as exc:
                     anonymous_checks[path] = {"error": type(exc).__name__}
@@ -344,10 +344,10 @@ def _bootstrap() -> None:
                 try:
                     response = page.goto(url, wait_until="domcontentloaded", timeout=30000)
                     body = page.locator("body").inner_text(timeout=5000)
-                    normalized = re.sub(r"\\s+", " ", body).strip().lower()
+                    normalized = re.sub(r"\s+", " ", body).strip().lower()
                     fingerprint = __import__("hashlib").sha256(normalized.encode()).hexdigest() if normalized else ""
                     baseline = anonymous_checks.get(path, {})
-                    route_checks.append({"path": path, "status": response.status if response else None, "final_url": page.url, "login_surface": _login_surface(body), "title": page.title(), "body_fingerprint": fingerprint, "anonymous_baseline": baseline, "differs_from_anonymous": bool(baseline.get("status") != (response.status if response else None) or baseline.get("final_url") != page.url or baseline.get("title") != page.title() or baseline.get("body_fingerprint") != fingerprint)})
+                    route_checks.append({"path": path, "status": response.status if response else None, "final_url": page.url, "login_surface": _login_surface(page.title() + "\n" + body), "title": page.title(), "body_fingerprint": fingerprint, "anonymous_baseline": baseline, "differs_from_anonymous": bool(baseline.get("status") != (response.status if response else None) or baseline.get("final_url") != page.url or baseline.get("title") != page.title() or baseline.get("body_fingerprint") != fingerprint)})
                     page.wait_for_timeout(1200)
                 except Exception as exc:
                     route_checks.append({"path": path, "error": type(exc).__name__})
