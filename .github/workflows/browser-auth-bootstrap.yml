@@ -76,7 +76,7 @@ jobs:
           pip install "cryptography>=43"
 
       - name: Install browser and desktop bridge
-        if: ${{ github.event_name == 'pull_request' || inputs.mode != 'self-test' }}
+        if: ${{ github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.mode != 'self-test') }}
         run: |
           sudo apt-get update
           sudo apt-get install -y xvfb x11vnc novnc openbox x11-utils
@@ -85,11 +85,11 @@ jobs:
           echo "CYDRA_CHROME_BINARY=$chromium_path" >> "$GITHUB_ENV"
 
       - name: Run deterministic authentication regression
-        if: ${{ github.event_name == 'pull_request' || inputs.mode == 'self-test' }}
+        if: ${{ github.event_name == 'push' || github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.mode == 'self-test') }}
         run: python scripts/browser_auth_bootstrap.py --self-test
 
       - name: Validate interactive secret configuration
-        if: ${{ github.event_name == 'push' || inputs.mode == 'bootstrap' }}
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'bootstrap' }}
         run: |
           test -n "$CYDRA_AUTH_ENCRYPTION_KEY" || (echo "CYDRA_AUTH_ENCRYPTION_KEY is required" && exit 1)
           test -n "$CYDRA_VNC_PASSWORD" || (echo "CYDRA_VNC_PASSWORD is required" && exit 1)
@@ -101,7 +101,7 @@ jobs:
           test -n "$CYDRA_AUTH_VERIFY_PATHS" || (echo "CYDRA_AUTH_VERIFY_PATHS is required for bootstrap" && exit 1)
 
       - name: Start virtual desktop
-        if: ${{ github.event_name == 'push' || inputs.mode == 'bootstrap' }}
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'bootstrap' }}
         run: |
           set -euo pipefail
           export DISPLAY=:99
@@ -134,7 +134,7 @@ jobs:
           echo "noVNC HTTP frontend is healthy on 127.0.0.1:6080"
 
       - name: Start temporary remote access tunnel
-        if: ${{ github.event_name == 'push' || inputs.mode == 'bootstrap' }}
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'bootstrap' }}
         run: |
           set -euo pipefail
           curl -fsSL https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -o /tmp/cloudflared
@@ -166,7 +166,7 @@ jobs:
           echo "VNC password: use the exact 8-character CYDRA_VNC_PASSWORD configured for this repository/environment."
 
       - name: Capture interactive authentication state
-        if: ${{ github.event_name == 'push' || inputs.mode == 'bootstrap' }}
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'bootstrap' }}
         env:
           DISPLAY: :99
           CYDRA_AUTH_WAIT_MINUTES: ${{ inputs.wait_minutes || '15' }}
@@ -177,7 +177,7 @@ jobs:
           python scripts/browser_auth_bootstrap.py --bootstrap
 
       - name: Upload encrypted authentication state
-        if: ${{ github.event_name == 'push' || inputs.mode == 'bootstrap' }}
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'bootstrap' }}
         uses: actions/upload-artifact@v4
         with:
           name: cydra-browser-auth-${{ inputs.identity_id || 'aurory-a' }}
