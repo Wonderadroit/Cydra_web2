@@ -299,9 +299,41 @@ def main() -> int:
     write_json(OUT / "report.json", report)
 
     lines = [
-        "# CYDRA Website QA Portfolio Sample",
+        "<div align=\"center\">",
         "",
-        f"- **Target:** [{TARGET}]({TARGET})",
+        "# CYDRA",
+        "**WEBSITE QUALITY ASSURANCE**",
+        "",
+        "*Independent, evidence-led website testing*",
+        "",
+        "---",
+        "",
+        "**FUNCTIONAL QA REPORT**",
+        "",
+        "</div>",
+        "",
+        f"> **Report status:** {'PASS' if failed == 0 else 'ATTENTION REQUIRED'}  ",
+        f"> **Prepared:** {ended[:10]} (UTC)  ",
+        "> **Engagement:** Demonstration assessment — public training website",
+        "",
+        "## Executive summary",
+        "",
+        f"CYDRA ran **{len(results)} functional checks** across desktop and mobile-emulated browser sizes. **{passed} passed and {failed} failed.**",
+        "",
+        ("**Overall result: PASS.** The selected interactions behaved as expected in this run. This is a limited functional sample, not a full-site audit, security certification, or guarantee that the website has no defects."
+         if failed == 0 else
+         "**Overall result: ATTENTION REQUIRED.** One or more checks did not meet the expected result. Review the individual observations and evidence before drawing conclusions."),
+        "",
+        "### What this means in plain English",
+        "",
+        "- **Checkboxes:** each checkbox changed when selected and returned to its original state when selected again.",
+        "- **Add and remove:** the page added one Delete control after Add Element was selected, then removed it when Delete was selected.",
+        "- **Screen sizes:** the same checks were run at a desktop-sized viewport and a mobile-sized, touch-emulated viewport.",
+        "- **Evidence:** screenshots were captured at the key stages so a reviewer can see what the browser displayed.",
+        "",
+        "## Assessment details",
+        "",
+        f"- **Website tested:** [{TARGET}]({TARGET})",
         "- **Target type:** Public training/demo website; not a production client",
         f"- **Run started (UTC):** {started}",
         f"- **Run ended (UTC):** {ended}",
@@ -376,20 +408,36 @@ def main() -> int:
         for item in results
     )
     pdf_html = f"""<!doctype html><html><head><meta charset="utf-8"><style>
-    body{{font-family:Arial,sans-serif;color:#172033;margin:28px;font-size:10pt}}
-    h1{{font-size:24pt}} h2{{margin-top:24px;border-bottom:1px solid #ddd;padding-bottom:5px}}
-    .muted{{color:#555}} table{{width:100%;border-collapse:collapse;font-size:9pt}}
+    @page{{size:A4;margin:18mm 16mm 20mm;@bottom-right{{content:"CYDRA · Functional QA Report · Page " counter(page);font-size:8pt;color:#667085}}}}
+    body{{font-family:Arial,sans-serif;color:#172033;margin:0;font-size:10pt;line-height:1.45}}
+    .letterhead{{border-bottom:3px solid #163a63;padding:0 0 12px;margin-bottom:22px}}
+    .brand{{font-size:23pt;letter-spacing:3px;font-weight:800;color:#163a63;margin:0}}
+    .brandline{{font-size:9pt;letter-spacing:1.5px;font-weight:bold;color:#344054;margin-top:2px}}
+    .document-type{{margin-top:16px;font-size:15pt;font-weight:bold;color:#163a63}}
+    .report-meta{{background:#f4f7fb;border-left:4px solid #163a63;padding:10px 12px;margin:14px 0 20px}}
+    h1{{font-size:22pt;color:#163a63}} h2{{margin-top:24px;border-bottom:1px solid #d0d5dd;padding-bottom:5px;color:#163a63}}
+    h3{{font-size:12pt;color:#344054}} .muted{{color:#555}} .summary{{font-size:12pt;font-weight:bold}}
+    .result-pass{{color:#087443;font-weight:bold}} .result-fail{{color:#b42318;font-weight:bold}}
+    table{{width:100%;border-collapse:collapse;font-size:9pt}}
     th,td{{border:1px solid #ccd2da;padding:7px;vertical-align:top;overflow-wrap:anywhere}}
-    th{{background:#f0f3f7}} .pass{{color:#087443;font-weight:bold}} .fail{{color:#b42318;font-weight:bold}}
-    .evidence{{page-break-inside:avoid;margin:16px 0}} img{{max-width:100%;max-height:570px;object-fit:contain;border:1px solid #ddd}}
+    th{{background:#eaf0f7;text-align:left}} .pass{{color:#087443;font-weight:bold}} .fail{{color:#b42318;font-weight:bold}}
+    .evidence{{page-break-inside:avoid;margin:16px 0}} img{{max-width:100%;max-height:520px;object-fit:contain;border:1px solid #ddd}}
+    .plain-english{{background:#f8fafc;padding:12px;border:1px solid #d0d5dd}}
     </style></head><body>
-    <h1>CYDRA Website QA Portfolio Sample</h1>
+    <header class="letterhead"><p class="brand">CYDRA</p><div class="brandline">WEBSITE QUALITY ASSURANCE</div><div class="document-type">FUNCTIONAL QA REPORT</div><p class="muted">Evidence-led testing · Clear results · Reproducible observations</p></header>
+    <div class="report-meta"><b>Report date (UTC):</b> {html.escape(ended[:10])}<br>
+    <b>Report outcome:</b> <span class="{'result-pass' if failed == 0 else 'result-fail'}">{'PASS' if failed == 0 else 'ATTENTION REQUIRED'}</span><br>
+    <b>Engagement type:</b> Demonstration assessment on a public training website</div>
+    <h2>Executive summary</h2>
+    <p class="summary">{len(results)} checks completed · {passed} passed · {failed} failed</p>
+    <div class="plain-english"><b>What this means:</b> {'The selected page interactions behaved as expected during this run. This is a limited functional sample, not a full-site audit, security certification, or guarantee that the website has no defects.' if failed == 0 else 'One or more checks did not meet the expected result. Review the observations and screenshots before deciding whether the behaviour is a defect.'}</div>
+    <h2>Assessment details</h2>
     <p class="muted">Automated functional checks on a public training website — not a production client engagement.</p>
-    <p><b>Target:</b> {html.escape(TARGET)}<br>
+    <p><b>Website:</b> {html.escape(TARGET)}<br>
     <b>Run started (UTC):</b> {html.escape(started)}<br>
     <b>Run ended (UTC):</b> {html.escape(ended)}<br>
     <b>Environment:</b> Chromium {html.escape(browser_version)}; desktop 1365×900 and mobile-emulated 390×844</p>
-    <h2>Summary</h2><p>Total: {len(results)} · Passed: {passed} · Failed: {failed}</p>
+    <p><b>Coverage in this report:</b> checkbox state changes and add/remove element behaviour at two viewport sizes.</p>
     <h2>Test results</h2><table><thead><tr><th>ID</th><th>Test</th><th>Status</th><th>Observed data</th></tr></thead><tbody>{result_rows}</tbody></table>
     <h2>Evidence screenshots</h2>{''.join(image_sections)}
     <h2>Interpretation and limitations</h2><p>{html.escape(report['interpretation'])}</p>
