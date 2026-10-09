@@ -118,7 +118,7 @@ def main() -> int:
             }
             response = None
             try:
-                response = page.goto(checkbox_url, wait_until="domcontentloaded", timeout=45000)
+                response = page.goto(checkbox_url, wait_until="commit", timeout=45000)
                 test1["http_status"] = response.status if response else None
                 if response:
                     try:
@@ -207,7 +207,7 @@ def main() -> int:
             }
             response = None
             try:
-                response = page.goto(add_url, wait_until="domcontentloaded", timeout=45000)
+                response = page.goto(add_url, wait_until="commit", timeout=45000)
                 test2["http_status"] = response.status if response else None
                 if response:
                     try:
