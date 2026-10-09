@@ -351,10 +351,26 @@ def main() -> int:
         "",
     ]
     for item in results:
+        if item["id"].startswith("QA-001"):
+            plain_result = (
+                "Both checkboxes changed state when selected and returned to their original states."
+                if item["status"] == "PASS" else
+                "The checkbox interaction did not meet every expected state change. Review the notes and screenshots."
+            )
+        else:
+            observed = item.get("observed", {})
+            plain_result = (
+                f"The Delete control count changed from {observed.get('delete_buttons_before_add', 'unknown')} "
+                f"to {observed.get('delete_buttons_after_add', 'unknown')} after adding, then to "
+                f"{observed.get('delete_buttons_after_remove', 'unknown')} after removing."
+                if item["status"] == "PASS" else
+                "The add/remove interaction did not meet every expected count. Review the notes and screenshots."
+            )
         lines.extend([
             f"### {item['id']}: {item['name']}",
             "",
             f"- **Status:** {item['status']}",
+            f"- **Plain-English result:** {plain_result}",
             f"- **URL:** {item['url']}",
             f"- **HTTP status:** {item.get('http_status', 'not recorded')}",
             "- **Steps:**",
@@ -398,12 +414,26 @@ def main() -> int:
                 f"<section class='evidence'><h3>{label}</h3>"
                 f"<img src='data:image/png;base64,{data}' alt='{label}' /></section>"
             )
+    def plain_english_result(item: dict) -> str:
+        observed = item.get("observed", {})
+        if item["id"].startswith("QA-001"):
+            if item["status"] == "PASS":
+                return "Both checkboxes changed when selected and returned to their original states."
+            return "The checkbox interaction did not meet every expected state change. See notes and screenshots."
+        if item["status"] == "PASS":
+            return (
+                f"Delete controls: {observed.get('delete_buttons_before_add', 'unknown')} before adding, "
+                f"{observed.get('delete_buttons_after_add', 'unknown')} after adding, and "
+                f"{observed.get('delete_buttons_after_remove', 'unknown')} after removing."
+            )
+        return "The add/remove interaction did not meet every expected count. See notes and screenshots."
+
     result_rows = "".join(
         "<tr>"
         f"<td>{html.escape(item['id'])}</td>"
         f"<td>{html.escape(item['name'])}</td>"
         f"<td class='{item['status'].lower()}'>{html.escape(item['status'])}</td>"
-        f"<td>{html.escape(json.dumps(item['observed'], sort_keys=True))}</td>"
+        f"<td>{html.escape(plain_english_result(item))}</td>"
         "</tr>"
         for item in results
     )
@@ -438,7 +468,7 @@ def main() -> int:
     <b>Run ended (UTC):</b> {html.escape(ended)}<br>
     <b>Environment:</b> Chromium {html.escape(browser_version)}; desktop 1365×900 and mobile-emulated 390×844</p>
     <p><b>Coverage in this report:</b> checkbox state changes and add/remove element behaviour at two viewport sizes.</p>
-    <h2>Test results</h2><table><thead><tr><th>ID</th><th>Test</th><th>Status</th><th>Observed data</th></tr></thead><tbody>{result_rows}</tbody></table>
+    <h2>Test results</h2><table><thead><tr><th>ID</th><th>Test</th><th>Status</th><th>Result in plain English</th></tr></thead><tbody>{result_rows}</tbody></table>
     <h2>Evidence screenshots</h2>{''.join(image_sections)}
     <h2>Interpretation and limitations</h2><p>{html.escape(report['interpretation'])}</p>
     <p>Mobile coverage uses viewport and touch emulation, not a physical-device certification. A failed test is a discrepancy requiring triage, not automatically a defect or security finding. Runtime errors are context only.</p>
