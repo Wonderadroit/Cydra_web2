@@ -79,9 +79,15 @@ def main() -> int:
                 "screenshots": [],
                 "notes": [],
             }
+            response = None
             try:
                 response = page.goto(checkbox_url, wait_until="commit", timeout=30000)
                 test1["http_status"] = response.status if response else None
+                if response:
+                    try:
+                        test1["response_html_excerpt"] = response.text()[:3000]
+                    except Exception as body_exc:
+                        test1["notes"].append(f"Response-body capture failed: {type(body_exc).__name__}: {body_exc}")
                 page.locator("input[type=checkbox]").first.wait_for(state="visible")
                 checks = page.locator("input[type=checkbox]")
                 count = checks.count()
@@ -132,6 +138,19 @@ def main() -> int:
                     test1["notes"].append(f"Error screenshot capture failed: {type(screenshot_exc).__name__}: {screenshot_exc}")
             results.append(test1)
 
+            # Isolate each test in a fresh page so pending third-party resources or page state
+            # from the previous navigation cannot contaminate the next test.
+            try:
+                page.close()
+            except Exception:
+                pass
+            page = context.new_page()
+            page.set_default_timeout(15000)
+            page.on("console", lambda msg: console_errors.append(msg.text) if msg.type == "error" else None)
+            page.on("pageerror", lambda error: page_errors.append(str(error)))
+            page.on("requestfailed", lambda request: failed_requests.append({"url": request.url, "error": request.failure or "unknown"}))
+            page.on("response", lambda response: http_errors.append({"url": response.url, "status": response.status}) if response.status >= 400 else None)
+
             # Test 2: adding and removing a UI element.
             add_url = f"{TARGET}/add_remove_elements/"
             test2 = {
@@ -149,9 +168,15 @@ def main() -> int:
                 "screenshots": [],
                 "notes": [],
             }
+            response = None
             try:
                 response = page.goto(add_url, wait_until="commit", timeout=30000)
                 test2["http_status"] = response.status if response else None
+                if response:
+                    try:
+                        test2["response_html_excerpt"] = response.text()[:3000]
+                    except Exception as body_exc:
+                        test2["notes"].append(f"Response-body capture failed: {type(body_exc).__name__}: {body_exc}")
                 add_button = page.get_by_role("button", name="Add Element")
                 add_button.wait_for(state="visible")
                 before = page.get_by_role("button", name="Delete").count()
