@@ -244,21 +244,20 @@ def _bootstrap() -> None:
             print(browser_log.read_text(errors="replace")[-12000:])
         raise RuntimeError("INTERACTIVE_BROWSER_START_FAILED: CDP endpoint was not ready")
 
-    try:
-        print("INTERACTIVE AUTHENTICATION READY")
-        print("A normal browser process is open directly on the authentication page.")
-        print("Complete the site's normal sign-in/authentication flow in the remote browser.")
-        print(f"Target: {target}")
-        print(f"Authentication page: {auth_url}")
-        print(f"Identity: {identity}")
-        print(f"Waiting up to {wait_seconds} seconds for authentication; verification starts immediately when a strong completion signal appears.")
-        # Keep the same interactive browser alive during verification. Reopening
-        # a profile in a second browser can lose transient SSO state and cannot
-        # inspect the tab the operator actually signed into.
-        deadline = time.time() + wait_seconds
-        while time.time() < deadline:
-            time.sleep(poll_seconds)
-        print("AUTHENTICATION WAIT COMPLETE: verifying the live interactive browser context.")
+    print("INTERACTIVE AUTHENTICATION READY")
+    print("A normal browser process is open directly on the authentication page.")
+    print("Complete the site's normal sign-in/authentication flow in the remote browser.")
+    print(f"Target: {target}")
+    print(f"Authentication page: {auth_url}")
+    print(f"Identity: {identity}")
+    print(f"Waiting up to {wait_seconds} seconds for authentication; verification starts immediately when a strong completion signal appears.")
+    # Keep the same interactive browser alive during verification. Reopening
+    # a profile in a second browser can lose transient SSO state and cannot
+    # inspect the tab the operator actually signed into.
+    deadline = time.time() + wait_seconds
+    while time.time() < deadline:
+        time.sleep(poll_seconds)
+    print("AUTHENTICATION WAIT COMPLETE: verifying the live interactive browser context.")
     try:
         with sync_playwright() as p:
             browser = p.chromium.connect_over_cdp(f"http://127.0.0.1:{cdp_port}")
