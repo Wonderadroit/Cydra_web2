@@ -41,7 +41,7 @@ on:
       wait_minutes:
         description: "Minutes available to complete browser sign-in"
         required: false
-        default: "15"
+        default: "20"
         type: string
 
 permissions:
