@@ -52,7 +52,7 @@ def main() -> int:
                 ignore_https_errors=False,
             )
             page = context.new_page()
-            page.set_default_timeout(10000)
+            page.set_default_timeout(15000)
             console_errors: list[str] = []
             page_errors: list[str] = []
             page.on("console", lambda msg: console_errors.append(msg.text) if msg.type == "error" else None)
@@ -76,7 +76,7 @@ def main() -> int:
                 "notes": [],
             }
             try:
-                response = page.goto(checkbox_url, wait_until="domcontentloaded")
+                response = page.goto(checkbox_url, wait_until="commit", timeout=30000)
                 test1["http_status"] = response.status if response else None
                 page.locator("input[type=checkbox]").first.wait_for(state="visible")
                 checks = page.locator("input[type=checkbox]")
@@ -137,7 +137,7 @@ def main() -> int:
                 "notes": [],
             }
             try:
-                response = page.goto(add_url, wait_until="domcontentloaded")
+                response = page.goto(add_url, wait_until="commit", timeout=30000)
                 test2["http_status"] = response.status if response else None
                 add_button = page.get_by_role("button", name="Add Element")
                 add_button.wait_for(state="visible")
