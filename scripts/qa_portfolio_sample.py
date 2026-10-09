@@ -55,7 +55,7 @@ def main() -> int:
             # In the Actions runner that script can stall document parsing before <body> exists.
             # Block only this non-functional analytics bootstrap and its event endpoint; leave
             # the page's application scripts, styles, and tested controls untouched.
-            context.route("**/js/vendor/298279967.js", lambda route: route.abort())
+            context.route("**/js/vendor/298279967.js", lambda route: route.fulfill(status=200, content_type="application/javascript", body=""))
             context.route("https://298279967.log.optimizely.com/**", lambda route: route.abort())
             page = context.new_page()
             page.set_default_timeout(15000)
