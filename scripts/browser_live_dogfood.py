@@ -7,6 +7,7 @@ from playwright.sync_api import sync_playwright
 from cydra_web2.adapter import HttpAdapter, IdentitySession
 from cydra_web2.discovery import discover
 from cydra_web2.live_config import LiveDogfoodConfig
+from cydra_web2.identity_diff import identity_differentials
 
 
 def _states():
@@ -112,7 +113,9 @@ def main():
         "http_observations":len(observations),
         "endpoints":sorted(model.endpoints),
         "resources":sorted(model.resources),
-        "note":"Browser session material is never written to the artifact; authorization findings require causal evidence.",
+        "identity_differentials":identity_differentials(model.observations),
+        "differential_candidate_count":sum(1 for item in identity_differentials(model.observations) if item["response_differs_between_identities"]),
+        "note":"Cross-identity response differences are triage candidates only. Browser session material is never written to the artifact; findings require proven ownership, a violated authorization boundary, impact, and causal replay.",
     }
     out=Path(os.environ.get("CYDRA_ARTIFACT","artifacts/live-browser-dogfood.json"))
     out.parent.mkdir(parents=True,exist_ok=True)
