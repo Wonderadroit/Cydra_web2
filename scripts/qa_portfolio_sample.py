@@ -94,9 +94,19 @@ def main() -> int:
                 has_touch=False,
                 ignore_https_errors=False,
             )
-            # The legacy analytics bootstrap is unrelated to the controls under test and has
-            # intermittently stalled or failed upstream. Fulfill only that script with empty JS;
-            # do not rewrite HTML or intercept application dependencies.
+            # The public demo intermittently stalls while loading legacy parser-blocking scripts.
+            # Preserve the live page HTML and inline control behavior, but make dependencies
+            # outside this check deterministic: same-version jQuery from the pinned local package,
+            # empty JS for unused UI libraries, and no remote analytics. The report discloses this.
+            jquery_bundle = Path("node_modules/jquery/dist/jquery.min.js").read_text(encoding="utf-8")
+            context.route(
+                "**/jquery-1.11.3.min.js",
+                lambda route: route.fulfill(
+                    status=200,
+                    content_type="application/javascript; charset=utf-8",
+                    body=jquery_bundle,
+                ),
+            )
             context.route(
                 "https://the-internet.herokuapp.com/js/vendor/298279967.js",
                 lambda route: route.fulfill(
@@ -105,10 +115,22 @@ def main() -> int:
                     body="",
                 ),
             )
-
-            # Do not intercept the demo's jQuery dependency: route.fetch can stall the
-            # HTML parser while the page waits for this legacy script. Let Chromium load
-            # it normally and record any real request failure in the evidence.
+            context.route(
+                "**/jquery-ui-1.11.4/**",
+                lambda route: route.fulfill(
+                    status=200,
+                    content_type="application/javascript; charset=utf-8",
+                    body="",
+                ),
+            )
+            context.route(
+                "**/js/foundation/**",
+                lambda route: route.fulfill(
+                    status=200,
+                    content_type="application/javascript; charset=utf-8",
+                    body="",
+                ),
+            )
             context.route("https://298279967.log.optimizely.com/**", lambda route: route.abort())
             page = context.new_page()
             page.set_default_timeout(15000)
@@ -301,7 +323,7 @@ def main() -> int:
             "browser_version": browser_version,
             "viewports": VIEWPORTS,
             "mobile_note": "Mobile coverage is a 390x844 narrow viewport only; touch interaction and physical-device behavior are not certified.",
-            "test_harness_adjustments": ["The known legacy analytics bootstrap was replaced with an empty JavaScript response because it is not required for the tested controls and has shown upstream instability. HTML and application dependencies were not modified."],
+            "test_harness_adjustments": ["The known legacy analytics bootstrap was replaced with an empty JavaScript response. To isolate the tested checkbox and Add/Remove behavior from intermittent legacy asset delivery, jQuery 1.11.3 is served from a pinned local package and the unused jQuery UI/Foundation scripts are stubbed. Live HTML, CSS, and the tested controls remain from the target. External delivery and behavior of those isolated dependencies are not certified."],
         },
         "summary": {"total": len(results), "passed": passed, "failed": failed},
         "tests": results,
@@ -486,7 +508,7 @@ def main() -> int:
     <h2>Test results</h2><table><thead><tr><th>ID</th><th>Test</th><th>Status</th><th>Result in plain English</th></tr></thead><tbody>{result_rows}</tbody></table>
     <h2>Evidence screenshots</h2>{''.join(image_sections)}
     <h2>Interpretation and limitations</h2><p>{html.escape(report['interpretation'])}</p>
-    <p>Narrow-viewport coverage is responsive-layout testing only; touch behavior and physical devices are not certified. The known legacy analytics bootstrap was fulfilled with an empty JavaScript response because it is unrelated to the tested controls and has shown upstream instability; application HTML and application dependencies were not modified. A failed test is a discrepancy requiring triage, not automatically a defect or security finding. Runtime errors are context only.</p>
+    <p>Narrow-viewport coverage is responsive-layout testing only; touch behavior and physical devices are not certified. The live page HTML and CSS were retained, but the known analytics bootstrap was stubbed, jQuery 1.11.3 was served from a pinned local package, and unused jQuery UI/Foundation scripts were stubbed to isolate the tested controls from intermittent legacy asset delivery. This does not certify external delivery or behavior of those dependencies. A failed test is a discrepancy requiring triage, not automatically a defect or security finding. Runtime errors are context only.</p>
     </body></html>"""
     with sync_playwright() as p:
         pdf_browser = p.chromium.launch(headless=True)
