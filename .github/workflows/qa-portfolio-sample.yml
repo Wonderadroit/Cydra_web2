@@ -24,7 +24,6 @@ jobs:
           # Use the pre-provisioned Ubuntu browser libraries; avoid apt dependency
           # installation here, which can stall independently of the QA runner.
           python -m playwright install chromium
-          npm install --no-save --package-lock=false jquery@1.11.3
       - name: Run desktop and narrow-viewport functional checks
         timeout-minutes: 5
         run: python scripts/qa_portfolio_sample.py
