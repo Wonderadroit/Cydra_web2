@@ -134,7 +134,9 @@ def _self_test() -> None:
             assert not _login_surface(page.locator("body").inner_text())
             # Regression: login indicators in the document title must fail closed too.
             assert _login_surface("Aurory Game Portal — Log In\nWelcome")
-            assert not _login_surface("CYDRA auth smoke\nauthenticated")
+            assert _login_surface("HTTP 200\\nPlease sign in to continue")
+            assert not _login_surface("CYDRA auth smoke\\nauthenticated")
+            assert not _login_surface("My Account\\nSign out")
             context.storage_state(path=state, indexed_db=True)
             context.close()
 
@@ -242,40 +244,52 @@ def _bootstrap() -> None:
             print(browser_log.read_text(errors="replace")[-12000:])
         raise RuntimeError("INTERACTIVE_BROWSER_START_FAILED: CDP endpoint was not ready")
 
-    try:
-        print("INTERACTIVE AUTHENTICATION READY")
-        print("A normal browser process is open directly on the authentication page.")
-        print("Complete the site's normal sign-in/authentication flow in the remote browser.")
-        print(f"Target: {target}")
-        print(f"Authentication page: {auth_url}")
-        print(f"Identity: {identity}")
-        print(f"Waiting up to {wait_seconds} seconds for authentication; verification starts immediately when a strong completion signal appears.")
-        # UI text alone is not a completion signal. Auth/SSO pages can transiently
-        # render application-looking text before redirecting back to the login wall.
-        # Always wait for the operator-controlled timeout and let the final verifier
-        # perform the authoritative anonymous differential check.
-        deadline = time.time() + wait_seconds
-        while time.time() < deadline:
-            time.sleep(poll_seconds)
-        print("AUTHENTICATION COMPLETION SIGNAL: timeout reached; proceeding to final verification.")
-    finally:
-        chrome.terminate()
-        try:
-            chrome.wait(timeout=15)
-        except subprocess.TimeoutExpired:
-            chrome.kill()
-
+    print("INTERACTIVE AUTHENTICATION READY")
+    print("A normal browser process is open directly on the authentication page.")
+    print("Complete the site's normal sign-in/authentication flow in the remote browser.")
+    print(f"Target: {target}")
+    print(f"Authentication page: {auth_url}")
+    print(f"Identity: {identity}")
+    print(f"Waiting up to {wait_seconds} seconds for authentication; verification starts immediately when a strong completion signal appears.")
+    # Keep the same interactive browser alive during verification. Reopening
+    # a profile in a second browser can lose transient SSO state and cannot
+    # inspect the tab the operator actually signed into.
+    deadline = time.time() + wait_seconds
+    while time.time() < deadline:
+        time.sleep(poll_seconds)
+    print("AUTHENTICATION WAIT COMPLETE: verifying the live interactive browser context.")
     try:
         with sync_playwright() as p:
-            context = p.chromium.launch_persistent_context(
-                str(profile_dir),
-                headless=True,
-                viewport={"width": 1440, "height": 900},
-            )
+            browser = p.chromium.connect_over_cdp(f"http://127.0.0.1:{cdp_port}")
+            if not browser.contexts:
+                raise RuntimeError("AUTHENTICATION_NOT_CONFIRMED: live browser has no accessible context")
+            context = browser.contexts[0]
+            context.set_default_timeout(5000)
+            pages = list(context.pages)
+            if not pages:
+                page = context.new_page()
+            else:
+                target_origin_for_tabs = urlparse(target)
+                target_pages = [
+                    candidate for candidate in pages
+                    if (urlparse(candidate.url).scheme, urlparse(candidate.url).netloc)
+                    == (target_origin_for_tabs.scheme, target_origin_for_tabs.netloc)
+                ]
+                page = target_pages[-1] if target_pages else pages[-1]
+            # Emit only sanitized URLs and titles: never print query strings,
+            # fragments, cookies, or storage values that could contain credentials.
+            tab_summary = []
+            for candidate in pages:
+                try:
+                    parsed = urlparse(candidate.url)
+                    safe_url = parsed._replace(query="", fragment="").geturl()
+                    tab_summary.append({"url": safe_url, "title": candidate.title()[:160]})
+                except Exception:
+                    tab_summary.append({"url": "<unavailable>", "title": ""})
+            print("LIVE BROWSER TABS: " + json.dumps(tab_summary, sort_keys=True))
             if header_value:
                 context.set_extra_http_headers({header_name: header_value})
 
-            page = context.pages[0] if context.pages else context.new_page()
             observed_api_requests = []
             observed_api_responses = []
 
@@ -313,15 +327,16 @@ def _bootstrap() -> None:
             page.on("request", record_request)
             page.on("response", record_response)
 
-            # Re-enter the configured authentication URL using the persisted
-            # profile. This lets SSO/FusionAuth complete any pending redirect
-            # and, importantly, gives the verifier a fresh application request
-            # rather than relying on stale cookies alone.
+            # Verify protected application paths directly in the live context.
+            # Do not restart the SSO flow here: that previously replaced the
+            # operator's final browser page and obscured whether sign-in completed.
             try:
-                page.goto(auth_url, wait_until="domcontentloaded", timeout=30000)
-                page.wait_for_timeout(2500)
-            except Exception as exc:
-                print(f"AUTH VERIFICATION: auth_url navigation warning: {type(exc).__name__}: {exc}")
+                print("LIVE AUTH TAB BEFORE VERIFICATION: " + json.dumps({
+                    "url": urlparse(page.url)._replace(query="", fragment="").geturl(),
+                    "title": page.title()[:160],
+                }, sort_keys=True))
+            except Exception:
+                pass
 
             verification_paths = _verification_paths(target)
             route_checks = []
@@ -437,6 +452,15 @@ def _bootstrap() -> None:
             context.storage_state(path=state, indexed_db=True)
             context.close()
     finally:
+        # Always stop the interactive browser after state capture/verification,
+        # including fail-closed paths. Never remove the profile while Chrome uses it.
+        if chrome.poll() is None:
+            chrome.terminate()
+            try:
+                chrome.wait(timeout=15)
+            except subprocess.TimeoutExpired:
+                chrome.kill()
+                chrome.wait(timeout=5)
         subprocess.run(["rm", "-rf", str(profile_dir)], check=True)
 
     encrypt_state(state, bundle)
