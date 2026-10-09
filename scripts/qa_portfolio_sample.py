@@ -94,37 +94,11 @@ def main() -> int:
                 has_touch=False,
                 ignore_https_errors=False,
             )
-            # The public demo intermittently stalls while loading legacy parser-blocking scripts.
-            # Preserve the live page HTML and inline control behavior, but make dependencies
-            # outside this check deterministic: same-version jQuery from the pinned local package,
-            # empty JS for unused UI libraries, and no remote analytics. The report discloses this.
-            jquery_bundle = Path("node_modules/jquery/dist/jquery.min.js").read_text(encoding="utf-8")
-            context.route(
-                "**/jquery-1.11.3.min.js",
-                lambda route: route.fulfill(
-                    status=200,
-                    content_type="application/javascript; charset=utf-8",
-                    body=jquery_bundle,
-                ),
-            )
+            # Block only the known legacy analytics bootstrap, which is unrelated to
+            # the controls under test and has shown upstream instability. Keep application
+            # dependencies live so the test observes the target's actual behavior.
             context.route(
                 "https://the-internet.herokuapp.com/js/vendor/298279967.js",
-                lambda route: route.fulfill(
-                    status=200,
-                    content_type="application/javascript; charset=utf-8",
-                    body="",
-                ),
-            )
-            context.route(
-                "**/jquery-ui-1.11.4/**",
-                lambda route: route.fulfill(
-                    status=200,
-                    content_type="application/javascript; charset=utf-8",
-                    body="",
-                ),
-            )
-            context.route(
-                "**/js/foundation/**",
                 lambda route: route.fulfill(
                     status=200,
                     content_type="application/javascript; charset=utf-8",
@@ -323,7 +297,7 @@ def main() -> int:
             "browser_version": browser_version,
             "viewports": VIEWPORTS,
             "mobile_note": "Mobile coverage is a 390x844 narrow viewport only; touch interaction and physical-device behavior are not certified.",
-            "test_harness_adjustments": ["The known legacy analytics bootstrap was replaced with an empty JavaScript response. To isolate the tested checkbox and Add/Remove behavior from intermittent legacy asset delivery, jQuery 1.11.3 is served from a pinned local package and the unused jQuery UI/Foundation scripts are stubbed. Live HTML, CSS, and the tested controls remain from the target. External delivery and behavior of those isolated dependencies are not certified."],
+            "test_harness_adjustments": ["The known legacy analytics bootstrap was replaced with an empty JavaScript response because it is unrelated to the tested controls and has shown upstream instability. Live HTML, CSS, jQuery, Foundation, and application behavior remain from the target; the analytics dependency itself is not assessed."],
         },
         "summary": {"total": len(results), "passed": passed, "failed": failed},
         "tests": results,
@@ -434,7 +408,7 @@ def main() -> int:
         "",
         report["interpretation"],
         "",
-        "This is a sample automation run, not a claim of paid client experience. The narrow viewport is a responsive-layout check only; it does not certify touch behavior or physical devices. The live page HTML and CSS were retained, but the known analytics bootstrap was stubbed, jQuery 1.11.3 was served from a pinned local package, and unused jQuery UI/Foundation scripts were stubbed to isolate the tested controls from intermittent legacy asset delivery. This does not certify external delivery or behavior of those dependencies. Any failure must be independently reproduced and assessed for user impact before being described as a defect.",
+        "This is a sample automation run, not a claim of paid client experience. The narrow viewport is a responsive-layout check only; it does not certify touch behavior or physical devices. Only the known legacy analytics bootstrap was stubbed because it is unrelated to the tested controls and has shown upstream instability. Live page HTML, CSS, jQuery, Foundation, and application behavior remain from the target; analytics delivery itself is not assessed. Any failure must be independently reproduced and assessed for user impact before being described as a defect.",
         "",
     ])
     (OUT / "report.md").write_text("\n".join(lines), encoding="utf-8")
@@ -508,7 +482,7 @@ def main() -> int:
     <h2>Test results</h2><table><thead><tr><th>ID</th><th>Test</th><th>Status</th><th>Result in plain English</th></tr></thead><tbody>{result_rows}</tbody></table>
     <h2>Evidence screenshots</h2>{''.join(image_sections)}
     <h2>Interpretation and limitations</h2><p>{html.escape(report['interpretation'])}</p>
-    <p>Narrow-viewport coverage is responsive-layout testing only; touch behavior and physical devices are not certified. The live page HTML and CSS were retained, but the known analytics bootstrap was stubbed, jQuery 1.11.3 was served from a pinned local package, and unused jQuery UI/Foundation scripts were stubbed to isolate the tested controls from intermittent legacy asset delivery. This does not certify external delivery or behavior of those dependencies. A failed test is a discrepancy requiring triage, not automatically a defect or security finding. Runtime errors are context only.</p>
+    <p>Narrow-viewport coverage is responsive-layout testing only; touch behavior and physical devices are not certified. Only the known legacy analytics bootstrap was stubbed because it is unrelated to the tested controls and has shown upstream instability. Live page HTML, CSS, jQuery, Foundation, and application behavior remain from the target; analytics delivery itself is not assessed. A failed test is a discrepancy requiring triage, not automatically a defect or security finding. Runtime errors are context only.</p>
     </body></html>"""
     with sync_playwright() as p:
         pdf_browser = p.chromium.launch(headless=True)
