@@ -250,28 +250,26 @@ def _bootstrap() -> None:
         print(f"Authentication page: {auth_url}")
         print(f"Identity: {identity}")
         print(f"Waiting up to {wait_seconds} seconds for authentication; verification starts immediately when a strong completion signal appears.")
-        # UI text alone is not a completion signal. Auth/SSO pages can transiently
-        # render application-looking text before redirecting back to the login wall.
-        # Always wait for the operator-controlled timeout and let the final verifier
-        # perform the authoritative anonymous differential check.
+        # Keep the same interactive browser alive during verification. Reopening
+        # a profile in a second browser can lose transient SSO state and cannot
+        # inspect the tab the operator actually signed into.
         deadline = time.time() + wait_seconds
         while time.time() < deadline:
             time.sleep(poll_seconds)
-        print("AUTHENTICATION COMPLETION SIGNAL: timeout reached; proceeding to final verification.")
-    finally:
-        chrome.terminate()
-        try:
-            chrome.wait(timeout=15)
-        except subprocess.TimeoutExpired:
-            chrome.kill()
-
+        print("AUTHENTICATION WAIT COMPLETE: verifying the live interactive browser context.")
     try:
         with sync_playwright() as p:
-            context = p.chromium.launch_persistent_context(
-                str(profile_dir),
-                headless=True,
-                viewport={"width": 1440, "height": 900},
-            )
+            browser = p.chromium.connect_over_cdp(f"http://127.0.0.1:{cdp_port}")
+            if not browser.contexts:
+                raise RuntimeError("AUTHENTICATION_NOT_CONFIRMED: live browser has no accessible context")
+            context = browser.contexts[0]
+            context.set_default_timeout(5000)
+            if not context.pages:
+                page = context.new_page()
+            else:
+                page = context.pages[0]
+            # Do not navigate away from the operator's final SSO/application tab
+            # until its URL/title/body have been captured by the verifier below.
             if header_value:
                 context.set_extra_http_headers({header_name: header_value})
 
@@ -437,6 +435,15 @@ def _bootstrap() -> None:
             context.storage_state(path=state, indexed_db=True)
             context.close()
     finally:
+        # Always stop the interactive browser after state capture/verification,
+        # including fail-closed paths. Never remove the profile while Chrome uses it.
+        if chrome.poll() is None:
+            chrome.terminate()
+            try:
+                chrome.wait(timeout=15)
+            except subprocess.TimeoutExpired:
+                chrome.kill()
+                chrome.wait(timeout=5)
         subprocess.run(["rm", "-rf", str(profile_dir)], check=True)
 
     encrypt_state(state, bundle)
