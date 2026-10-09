@@ -264,16 +264,31 @@ def _bootstrap() -> None:
                 raise RuntimeError("AUTHENTICATION_NOT_CONFIRMED: live browser has no accessible context")
             context = browser.contexts[0]
             context.set_default_timeout(5000)
-            if not context.pages:
+            pages = list(context.pages)
+            if not pages:
                 page = context.new_page()
             else:
-                page = context.pages[0]
-            # Do not navigate away from the operator's final SSO/application tab
-            # until its URL/title/body have been captured by the verifier below.
+                target_origin_for_tabs = urlparse(target)
+                target_pages = [
+                    candidate for candidate in pages
+                    if (urlparse(candidate.url).scheme, urlparse(candidate.url).netloc)
+                    == (target_origin_for_tabs.scheme, target_origin_for_tabs.netloc)
+                ]
+                page = target_pages[-1] if target_pages else pages[-1]
+            # Emit only sanitized URLs and titles: never print query strings,
+            # fragments, cookies, or storage values that could contain credentials.
+            tab_summary = []
+            for candidate in pages:
+                try:
+                    parsed = urlparse(candidate.url)
+                    safe_url = parsed._replace(query="", fragment="").geturl()
+                    tab_summary.append({"url": safe_url, "title": candidate.title()[:160]})
+                except Exception:
+                    tab_summary.append({"url": "<unavailable>", "title": ""})
+            print("LIVE BROWSER TABS: " + json.dumps(tab_summary, sort_keys=True))
             if header_value:
                 context.set_extra_http_headers({header_name: header_value})
 
-            page = context.pages[0] if context.pages else context.new_page()
             observed_api_requests = []
             observed_api_responses = []
 
@@ -311,15 +326,16 @@ def _bootstrap() -> None:
             page.on("request", record_request)
             page.on("response", record_response)
 
-            # Re-enter the configured authentication URL using the persisted
-            # profile. This lets SSO/FusionAuth complete any pending redirect
-            # and, importantly, gives the verifier a fresh application request
-            # rather than relying on stale cookies alone.
+            # Verify protected application paths directly in the live context.
+            # Do not restart the SSO flow here: that previously replaced the
+            # operator's final browser page and obscured whether sign-in completed.
             try:
-                page.goto(auth_url, wait_until="domcontentloaded", timeout=30000)
-                page.wait_for_timeout(2500)
-            except Exception as exc:
-                print(f"AUTH VERIFICATION: auth_url navigation warning: {type(exc).__name__}: {exc}")
+                print("LIVE AUTH TAB BEFORE VERIFICATION: " + json.dumps({
+                    "url": urlparse(page.url)._replace(query="", fragment="").geturl(),
+                    "title": page.title()[:160],
+                }, sort_keys=True))
+            except Exception:
+                pass
 
             verification_paths = _verification_paths(target)
             route_checks = []
