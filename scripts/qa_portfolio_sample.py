@@ -51,23 +51,13 @@ def main() -> int:
                 has_touch=(device == "mobile"),
                 ignore_https_errors=False,
             )
-            # Remove only the legacy analytics <script> element from the two HTML
-            # documents under test. Returning the original document with that non-functional
-            # bootstrap tag removed avoids a parser-blocking third-party script in CI while
-            # preserving the application's own scripts, markup, styles, and tested controls.
-            import re
-
-            def remove_legacy_analytics(route):
-                response = route.fetch()
-                body = response.text()
-                body = re.sub(
-                    r"""<script\s+src=["']/js/vendor/298279967\.js["']\s*>\s*</script>""",
-                    "",
-                    body,
-                    count=1,
-                    flags=re.IGNORECASE,
-                )
-                route.fulfill(response=response, body=body)
+            # Block the known legacy analytics bootstrap without intercepting the HTML document.
+            # Rewriting the document through route.fetch can hang on transient origin delays and
+            # prevent the actual UI checks from running; leave application HTML untouched.
+            context.route(
+                "https://the-internet.herokuapp.com/js/vendor/298279967.js",
+                lambda route: route.abort(),
+            )
 
             # The Add Element demo's inline handler depends on its legacy jQuery bundle.
             # Retry only that dependency when the host transiently returns 5xx; routing every
@@ -85,8 +75,6 @@ def main() -> int:
                 "https://the-internet.herokuapp.com/js/vendor/jquery-1.11.3.min.js",
                 retry_jquery_server_errors,
             )
-            context.route("https://the-internet.herokuapp.com/checkboxes", remove_legacy_analytics)
-            context.route("https://the-internet.herokuapp.com/add_remove_elements/**", remove_legacy_analytics)
             context.route("https://298279967.log.optimizely.com/**", lambda route: route.abort())
             page = context.new_page()
             page.set_default_timeout(15000)
