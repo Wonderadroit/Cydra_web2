@@ -51,6 +51,12 @@ def main() -> int:
                 has_touch=(device == "mobile"),
                 ignore_https_errors=False,
             )
+            # The demo page loads a legacy Optimizely bootstrap synchronously in <head>.
+            # In the Actions runner that script can stall document parsing before <body> exists.
+            # Block only this non-functional analytics bootstrap and its event endpoint; leave
+            # the page's application scripts, styles, and tested controls untouched.
+            context.route("**/js/vendor/298279967.js", lambda route: route.abort())
+            context.route("https://298279967.log.optimizely.com/**", lambda route: route.abort())
             page = context.new_page()
             page.set_default_timeout(15000)
             console_errors: list[str] = []
