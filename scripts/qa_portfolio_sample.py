@@ -28,6 +28,26 @@ def write_json(path: Path, value: object) -> None:
     path.write_text(json.dumps(value, indent=2, sort_keys=True), encoding="utf-8")
 
 
+def navigate_with_retries(page, url: str, attempts: int = 3):
+    """Retry transient upstream errors/timeouts without weakening test assertions."""
+    last_error = None
+    for attempt in range(1, attempts + 1):
+        try:
+            response = page.goto(url, wait_until="domcontentloaded", timeout=20000)
+            if response is not None and response.status >= 500 and attempt < attempts:
+                page.wait_for_timeout(1000 * attempt)
+                continue
+            return response
+        except Exception as exc:
+            last_error = exc
+            if attempt == attempts:
+                raise
+            page.wait_for_timeout(1000 * attempt)
+    if last_error is not None:
+        raise last_error
+    return None
+
+
 def main() -> int:
     # This first portfolio runner is deliberately pinned to the public training site.
     parsed = urlparse(TARGET)
@@ -93,7 +113,7 @@ def main() -> int:
             }
             response = None
             try:
-                response = page.goto(checkbox_url, wait_until="domcontentloaded", timeout=45000)
+                response = navigate_with_retries(page, checkbox_url)
                 test1["http_status"] = response.status if response else None
                 if response:
                     try:
@@ -182,7 +202,7 @@ def main() -> int:
             }
             response = None
             try:
-                response = page.goto(add_url, wait_until="domcontentloaded", timeout=45000)
+                response = navigate_with_retries(page, add_url)
                 test2["http_status"] = response.status if response else None
                 if response:
                     try:
