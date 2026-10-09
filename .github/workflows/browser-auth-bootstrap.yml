@@ -76,7 +76,7 @@ jobs:
           pip install "cryptography>=43"
 
       - name: Install browser and desktop bridge
-        if: ${{ github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.mode != 'self-test') }}
+        if: ${{ github.event_name == 'push' || github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.mode != 'self-test') }}
         run: |
           sudo apt-get update
           sudo apt-get install -y xvfb x11vnc novnc openbox x11-utils
