@@ -274,9 +274,9 @@ def main() -> int:
             }
             test1["runtime_observations"] = runtime
             test2["runtime_observations"] = runtime
-            # Do not close a possibly unresponsive per-viewport context here: a stalled
-            # third-party renderer can hang context.close(). The browser teardown below
-            # closes every context in one operation before report generation.
+            # Close each viewport context before browser teardown so the next viewport
+            # starts cleanly; diagnostics above are bounded and already captured.
+            context.close()
         browser.close()
 
     ended = utc_now()
