@@ -75,14 +75,18 @@ jobs:
           pip install -e ".[browser]"
           pip install "cryptography>=43"
 
-      - name: Install browser and desktop bridge
-        if: ${{ github.event_name == 'push' || github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.mode != 'self-test') }}
+      - name: Install Playwright browser
+        if: ${{ github.event_name == 'push' || github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' }}
         run: |
-          sudo apt-get update
-          sudo apt-get install -y xvfb x11vnc novnc openbox x11-utils
           python -m playwright install --with-deps chromium
           chromium_path=$(python -c "from playwright.sync_api import sync_playwright; p=sync_playwright().start(); print(p.chromium.executable_path); p.stop()")
           echo "CYDRA_CHROME_BINARY=$chromium_path" >> "$GITHUB_ENV"
+
+      - name: Install virtual desktop bridge
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'bootstrap' }}
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb x11vnc novnc openbox x11-utils
 
       - name: Run deterministic authentication regression
         if: ${{ github.event_name == 'push' || github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.mode == 'self-test') }}
