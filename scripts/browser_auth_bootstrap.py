@@ -132,6 +132,9 @@ def _self_test() -> None:
             page.goto(f"http://127.0.0.1:{port}/", wait_until="domcontentloaded")
             assert page.title() == "CYDRA auth smoke"
             assert not _login_surface(page.locator("body").inner_text())
+            # Regression: login indicators in the document title must fail closed too.
+            assert _login_surface("Aurory Game Portal — Log In\nWelcome")
+            assert not _login_surface("CYDRA auth smoke\nauthenticated")
             context.storage_state(path=state, indexed_db=True)
             context.close()
 
