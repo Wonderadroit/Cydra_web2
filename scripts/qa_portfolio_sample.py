@@ -119,11 +119,8 @@ def main() -> int:
             try:
                 response = navigate_with_retries(page, checkbox_url)
                 test1["http_status"] = response.status if response else None
-                if response:
-                    try:
-                        test1["response_html_excerpt"] = response.text()[:3000]
-                    except Exception as body_exc:
-                        test1["notes"].append(f"Response-body capture failed: {type(body_exc).__name__}: {body_exc}")
+                # Record status and observed browser behavior without reading an unbounded
+                # streaming response body; a stalled body must not hang the entire QA run.
                 page.locator("input[type=checkbox]").first.wait_for(state="visible")
                 checks = page.locator("input[type=checkbox]")
                 count = checks.count()
@@ -208,11 +205,8 @@ def main() -> int:
             try:
                 response = navigate_with_retries(page, add_url)
                 test2["http_status"] = response.status if response else None
-                if response:
-                    try:
-                        test2["response_html_excerpt"] = response.text()[:3000]
-                    except Exception as body_exc:
-                        test2["notes"].append(f"Response-body capture failed: {type(body_exc).__name__}: {body_exc}")
+                # Record status and observed browser behavior without reading an unbounded
+                # streaming response body; a stalled body must not hang the entire QA run.
                 add_button = page.get_by_role("button", name="Add Element")
                 add_button.wait_for(state="visible")
                 before = page.get_by_role("button", name="Delete").count()
@@ -466,12 +460,12 @@ def main() -> int:
     <p><b>Website:</b> {html.escape(TARGET)}<br>
     <b>Run started (UTC):</b> {html.escape(started)}<br>
     <b>Run ended (UTC):</b> {html.escape(ended)}<br>
-    <b>Environment:</b> Chromium {html.escape(browser_version)}; desktop 1365×900 and mobile-emulated 390×844</p>
+    <b>Environment:</b> Chromium {html.escape(browser_version)}; desktop 1365×900 and narrow viewport 390×844 (viewport-only)</p>
     <p><b>Coverage in this report:</b> checkbox state changes and add/remove element behaviour at two viewport sizes.</p>
     <h2>Test results</h2><table><thead><tr><th>ID</th><th>Test</th><th>Status</th><th>Result in plain English</th></tr></thead><tbody>{result_rows}</tbody></table>
     <h2>Evidence screenshots</h2>{''.join(image_sections)}
     <h2>Interpretation and limitations</h2><p>{html.escape(report['interpretation'])}</p>
-    <p>Mobile coverage uses viewport and touch emulation, not a physical-device certification. A failed test is a discrepancy requiring triage, not automatically a defect or security finding. Runtime errors are context only.</p>
+    <p>Narrow-viewport coverage is responsive-layout testing only; touch behavior and physical devices are not certified. The known legacy analytics bootstrap was fulfilled with an empty JavaScript response because it is unrelated to the tested controls and has shown upstream instability; application HTML and application dependencies were not modified. A failed test is a discrepancy requiring triage, not automatically a defect or security finding. Runtime errors are context only.</p>
     </body></html>"""
     with sync_playwright() as p:
         pdf_browser = p.chromium.launch(headless=True)
