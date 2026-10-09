@@ -434,7 +434,7 @@ def main() -> int:
         "",
         report["interpretation"],
         "",
-        "This is a sample automation run, not a claim of paid client experience. The narrow viewport is a responsive-layout check only; it does not certify touch behavior or physical devices. The known legacy analytics bootstrap was fulfilled with an empty JavaScript response because it is unrelated to the tested controls and has shown upstream instability; application HTML and application dependencies were not modified. Any failure must be independently reproduced and assessed for user impact before being described as a defect.",
+        "This is a sample automation run, not a claim of paid client experience. The narrow viewport is a responsive-layout check only; it does not certify touch behavior or physical devices. The live page HTML and CSS were retained, but the known analytics bootstrap was stubbed, jQuery 1.11.3 was served from a pinned local package, and unused jQuery UI/Foundation scripts were stubbed to isolate the tested controls from intermittent legacy asset delivery. This does not certify external delivery or behavior of those dependencies. Any failure must be independently reproduced and assessed for user impact before being described as a defect.",
         "",
     ])
     (OUT / "report.md").write_text("\n".join(lines), encoding="utf-8")
