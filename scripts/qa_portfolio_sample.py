@@ -61,7 +61,7 @@ def main() -> int:
                 response = route.fetch()
                 body = response.text()
                 body = re.sub(
-                    r'<script\\s+src=["\\']/js/vendor/298279967\\.js["\\']\\s*>\\s*</script>',
+                    r"""<script\s+src=["']/js/vendor/298279967\.js["']\s*>\s*</script>""",
                     "",
                     body,
                     count=1,
