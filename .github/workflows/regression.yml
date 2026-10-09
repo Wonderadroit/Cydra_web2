@@ -14,3 +14,28 @@ jobs:
           python-version: "3.12"
       - run: python -m pip install -e ".[test]"
       - run: python -m pytest -q
+
+  qa-portfolio-browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install browser automation
+        run: |
+          python -m pip install -e ".[browser]"
+          python -m playwright install --with-deps chromium
+      - name: Compile QA runner
+        run: python -m py_compile scripts/qa_portfolio_sample.py
+      - name: Run automated desktop and mobile-emulated QA
+        run: python scripts/qa_portfolio_sample.py
+      - name: Upload report and screenshot evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cydra-qa-portfolio-sample
+          path: artifacts/qa-portfolio/
+          if-no-files-found: warn
+          retention-days: 30
