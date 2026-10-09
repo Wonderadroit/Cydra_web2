@@ -59,22 +59,9 @@ def main() -> int:
                 lambda route: route.abort(),
             )
 
-            # The Add Element demo's inline handler depends on its legacy jQuery bundle.
-            # Retry only that dependency when the host transiently returns 5xx; routing every
-            # resource through route.fetch caused unrelated assets to delay DOM readiness.
-            # A persistent error is returned unchanged and remains a real test failure.
-            def retry_jquery_server_errors(route):
-                response = route.fetch(timeout=8000)
-                for _ in range(2):
-                    if response.status < 500:
-                        break
-                    response = route.fetch(timeout=8000)
-                route.fulfill(response=response)
-
-            context.route(
-                "https://the-internet.herokuapp.com/js/vendor/jquery-1.11.3.min.js",
-                retry_jquery_server_errors,
-            )
+            # Do not intercept the demo's jQuery dependency: route.fetch can stall the
+            # HTML parser while the page waits for this legacy script. Let Chromium load
+            # it normally and record any real request failure in the evidence.
             context.route("https://298279967.log.optimizely.com/**", lambda route: route.abort())
             page = context.new_page()
             page.set_default_timeout(15000)
