@@ -47,7 +47,7 @@ def main() -> int:
             context = browser.new_context(
                 viewport=viewport,
                 device_scale_factor=1,
-                is_mobile=(device == "mobile"),
+                is_mobile=False,  # Use a narrow viewport plus touch emulation; avoid Chromium mobile-device mode on this demo.
                 has_touch=(device == "mobile"),
                 ignore_https_errors=False,
             )
