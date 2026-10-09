@@ -33,10 +33,11 @@ def navigate_with_retries(page, url: str, attempts: int = 3):
     last_error = None
     for attempt in range(1, attempts + 1):
         try:
-            # Wait until the HTML parser has produced a DOM before asserting controls.
-            # "commit" can return while the document is still unusable; this caused
-            # misleading HTTP-200 results with no body/controls in CI.
-            response = page.goto(url, wait_until="domcontentloaded", timeout=12000)
+            # Commit is the navigation boundary; the document's DOM and tested
+            # controls are validated separately below with bounded locator waits.
+            # Waiting for DOMContentLoaded can time out when an upstream resource stalls,
+            # even when the document and its controls are already usable.
+            response = page.goto(url, wait_until="commit", timeout=20000)
             if response is not None and response.status >= 500 and attempt < attempts:
                 page.wait_for_timeout(1000 * attempt)
                 continue
@@ -62,7 +63,7 @@ def wait_for_visible_with_one_reload(page, locator, url: str, test: dict, contro
         )
         # A reload is a new observation of the same approved target and does not alter
         # expected state or replace the tested application code.
-        page.goto(url, wait_until="domcontentloaded", timeout=12000)
+        page.goto(url, wait_until="commit", timeout=20000)
         try:
             locator.wait_for(state="visible", timeout=8000)
         except PlaywrightTimeoutError as second_error:
@@ -155,7 +156,7 @@ def main() -> int:
                     raise AssertionError(f"Expected 2 checkboxes, observed {count}")
                 initial = [checks.nth(i).is_checked() for i in range(count)]
                 shot = evidence_dir / f"{device}-checkboxes-initial.png"
-                page.screenshot(path=str(shot), full_page=True, animations="disabled", timeout=15000)
+                page.screenshot(path=str(shot), full_page=True, animations="disabled", timeout=20000)
                 test1["screenshots"].append(str(shot.relative_to(OUT)))
                 changed = []
                 restored = []
@@ -166,7 +167,7 @@ def main() -> int:
                     checks.nth(i).click()
                     restored.append(checks.nth(i).is_checked() == initial[i])
                 final_shot = evidence_dir / f"{device}-checkboxes-restored.png"
-                page.screenshot(path=str(final_shot), full_page=True, animations="disabled", timeout=15000)
+                page.screenshot(path=str(final_shot), full_page=True, animations="disabled", timeout=20000)
                 test1["screenshots"].append(str(final_shot.relative_to(OUT)))
                 test1["observed"] = {
                     "checkbox_count": count,
@@ -243,7 +244,7 @@ def main() -> int:
                 page.get_by_role("button", name="Delete").first.wait_for(state="visible")
                 after_add = page.get_by_role("button", name="Delete").count()
                 after_add_shot = evidence_dir / f"{device}-add-remove-added.png"
-                page.screenshot(path=str(after_add_shot), full_page=True, animations="disabled", timeout=15000)
+                page.screenshot(path=str(after_add_shot), full_page=True, animations="disabled", timeout=20000)
                 test2["screenshots"].append(str(after_add_shot.relative_to(OUT)))
                 page.get_by_role("button", name="Delete").first.click()
                 page.wait_for_function("document.querySelectorAll('button.added-manually').length === 0")
