@@ -122,12 +122,18 @@ def discover(adapter: HttpAdapter, model: TargetModel, seeds: Iterable[str]=('/'
         obs=Observation(f'obs:{observation_key}',endpoint_id,response.identity_id,response.status_code,fp,len(response.body),f'GET:{path}')
         model.add_observation(obs); observations.append(obs)
         ctype=str(getattr(response,'headers',{}).get('Content-Type','')).lower(); is_js='javascript' in ctype or path.lower().endswith(('.js','.mjs'))
-        if is_js and path not in analyzed and len(analyzed)<max_js_bundles: analyses.append(_analyze_bundle(path,response.body,model.target)); analyzed.add(path)
+        bundle_analysis = None
+        if is_js and path not in analyzed and len(analyzed)<max_js_bundles:
+            bundle_analysis = _analyze_bundle(path,response.body,model.target)
+            analyses.append(bundle_analysis)
+            analyzed.add(path)
         api_candidates = set(_api_paths(response.body))
         parser = _Links(); parser.feed(response.body)
         static_candidates = {x for x in parser.links if x.startswith('/')}
-        if is_js:
-            api_candidates.update(x for _, x in analyses[-1].endpoints if x.startswith('/') and '{' not in x)
+        # Only use endpoint reconstructions attributable to this exact bundle.
+        # Never reuse the previous bundle's analysis when the analysis cap is reached.
+        if bundle_analysis is not None:
+            api_candidates.update(x for _, x in bundle_analysis.endpoints if x.startswith('/') and '{' not in x)
         # API routes are the security-research frontier; static assets remain fallback discovery.
         api_candidates = {x for x in api_candidates if x.startswith('/') and '{' not in x}
         for candidate in sorted(api_candidates, reverse=True):
