@@ -454,7 +454,7 @@ def main() -> int:
         "<tr>"
         f"<td>{html.escape(item['id'])}</td>"
         f"<td>{html.escape(item['name'])}</td>"
-        f"<td class='{item['status'].lower()}'>{html.escape(item['status'])}</td>"
+        f"<td class='status-cell {item['status'].lower()}'>{html.escape(item['status'])}</td>"
         f"<td>{html.escape(plain_english_result(item) + (' One page reload was needed after an initial readiness timeout.' if any(note.startswith('Readiness retry:') for note in item.get('notes', [])) else ''))}</td>"
         "</tr>"
         for item in results
@@ -470,8 +470,13 @@ def main() -> int:
     h1{{font-size:22pt;color:#163a63}} h2{{margin-top:24px;border-bottom:1px solid #d0d5dd;padding-bottom:5px;color:#163a63}}
     h3{{font-size:12pt;color:#344054}} .muted{{color:#555}} .summary{{font-size:12pt;font-weight:bold}}
     .result-pass{{color:#087443;font-weight:bold}} .result-fail{{color:#b42318;font-weight:bold}}
-    table{{width:100%;border-collapse:collapse;font-size:9pt}}
-    th,td{{border:1px solid #ccd2da;padding:7px;vertical-align:top;overflow-wrap:anywhere}}
+    table{{width:100%;table-layout:fixed;border-collapse:collapse;font-size:9pt}}
+    th,td{{border:1px solid #ccd2da;padding:7px;vertical-align:top;overflow-wrap:break-word;word-break:normal}}
+    .results-table th:nth-child(1),.results-table td:nth-child(1){{width:18%}}
+    .results-table th:nth-child(2),.results-table td:nth-child(2){{width:28%}}
+    .results-table th:nth-child(3),.results-table td:nth-child(3){{width:12%}}
+    .results-table th:nth-child(4),.results-table td:nth-child(4){{width:42%}}
+    .status-cell{{white-space:nowrap}}
     th{{background:#eaf0f7;text-align:left}} .pass{{color:#087443;font-weight:bold}} .fail{{color:#b42318;font-weight:bold}}
     .evidence{{page-break-inside:avoid;margin:16px 0}} img{{max-width:100%;max-height:520px;object-fit:contain;border:1px solid #ddd}}
     .plain-english{{background:#f8fafc;padding:12px;border:1px solid #d0d5dd}}
@@ -490,7 +495,7 @@ def main() -> int:
     <b>Run ended (UTC):</b> {html.escape(ended)}<br>
     <b>Environment:</b> Chromium {html.escape(browser_version)}; desktop 1365×900 and narrow viewport 390×844 (viewport-only)</p>
     <p><b>Coverage in this report:</b> checkbox state changes and add/remove element behaviour at two viewport sizes.</p>
-    <h2>Test results</h2><table><thead><tr><th>ID</th><th>Test</th><th>Status</th><th>Result in plain English</th></tr></thead><tbody>{result_rows}</tbody></table>
+    <h2>Test results</h2><table class="results-table"><thead><tr><th>ID</th><th>Test</th><th>Status</th><th>Result in plain English</th></tr></thead><tbody>{result_rows}</tbody></table>
     <h2>Evidence screenshots</h2>{''.join(image_sections)}
     <h2>Interpretation and limitations</h2><p>{html.escape(report['interpretation'])}</p>
     <p>Narrow-viewport coverage is responsive-layout testing only; touch behavior and physical devices are not certified. Only the known legacy analytics request was blocked because it is unrelated to the tested controls and has shown upstream instability. Live page HTML, CSS, jQuery, Foundation, and application behavior remain from the target; analytics delivery itself is not assessed. A failed test is a discrepancy requiring triage, not automatically a defect or security finding. Runtime errors are context only.</p>
