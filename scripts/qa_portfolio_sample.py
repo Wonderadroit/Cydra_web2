@@ -69,22 +69,22 @@ def main() -> int:
                 )
                 route.fulfill(response=response, body=body)
 
-            # Retry transient target-side 5xx responses for assets and documents. A
-            # single 503 on the legacy jQuery bundle makes the demo's inline Add Element
-            # handler fail with "$ is not defined"; retrying the same request preserves the
-            # real page and behavior rather than mocking application code. Persistent 5xx
-            # responses still reach the browser and remain visible as test failures.
-            def retry_transient_server_errors(route):
-                response = route.fetch()
+            # The Add Element demo's inline handler depends on its legacy jQuery bundle.
+            # Retry only that dependency when the host transiently returns 5xx; routing every
+            # resource through route.fetch caused unrelated assets to delay DOM readiness.
+            # A persistent error is returned unchanged and remains a real test failure.
+            def retry_jquery_server_errors(route):
+                response = route.fetch(timeout=8000)
                 for _ in range(2):
                     if response.status < 500:
                         break
-                    response = route.fetch()
+                    response = route.fetch(timeout=8000)
                 route.fulfill(response=response)
 
-            # Register the host-wide retry first; the specific HTML rewrites below take
-            # precedence and remain limited to removing the legacy analytics bootstrap.
-            context.route("https://the-internet.herokuapp.com/**", retry_transient_server_errors)
+            context.route(
+                "https://the-internet.herokuapp.com/js/vendor/jquery-1.11.3.min.js",
+                retry_jquery_server_errors,
+            )
             context.route("https://the-internet.herokuapp.com/checkboxes", remove_legacy_analytics)
             context.route("https://the-internet.herokuapp.com/add_remove_elements/**", remove_legacy_analytics)
             context.route("https://298279967.log.optimizely.com/**", lambda route: route.abort())
