@@ -33,9 +33,10 @@ def navigate_with_retries(page, url: str, attempts: int = 3):
     last_error = None
     for attempt in range(1, attempts + 1):
         try:
-            # Wait for the response to commit; explicit locator assertions below
-            # establish whether the tested controls actually became available.
-            response = page.goto(url, wait_until="commit", timeout=12000)
+            # Wait until the HTML parser has produced a DOM before asserting controls.
+            # "commit" can return while the document is still unusable; this caused
+            # misleading HTTP-200 results with no body/controls in CI.
+            response = page.goto(url, wait_until="domcontentloaded", timeout=12000)
             if response is not None and response.status >= 500 and attempt < attempts:
                 page.wait_for_timeout(1000 * attempt)
                 continue
@@ -61,7 +62,7 @@ def wait_for_visible_with_one_reload(page, locator, url: str, test: dict, contro
         )
         # A reload is a new observation of the same approved target and does not alter
         # expected state or replace the tested application code.
-        page.goto(url, wait_until="commit", timeout=12000)
+        page.goto(url, wait_until="domcontentloaded", timeout=12000)
         try:
             locator.wait_for(state="visible", timeout=8000)
         except PlaywrightTimeoutError as second_error:
