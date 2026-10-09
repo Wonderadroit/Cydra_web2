@@ -134,7 +134,9 @@ def _self_test() -> None:
             assert not _login_surface(page.locator("body").inner_text())
             # Regression: login indicators in the document title must fail closed too.
             assert _login_surface("Aurory Game Portal — Log In\nWelcome")
-            assert not _login_surface("CYDRA auth smoke\nauthenticated")
+            assert _login_surface("HTTP 200\\nPlease sign in to continue")
+            assert not _login_surface("CYDRA auth smoke\\nauthenticated")
+            assert not _login_surface("My Account\\nSign out")
             context.storage_state(path=state, indexed_db=True)
             context.close()
 
