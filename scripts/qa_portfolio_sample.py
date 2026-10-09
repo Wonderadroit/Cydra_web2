@@ -100,21 +100,10 @@ def main() -> int:
                 has_touch=False,
                 ignore_https_errors=False,
             )
-            # Do not intercept target requests. The previous run returned HTTP 200 but
-            # the renderer never exposed the document controls; aborting the legacy
-            # analytics bootstrap was a shared variable in every failed viewport.
-            # Observe the page with its normal request behavior and record failures.
-            # Isolate a known unstable third-party analytics bootstrap. This
-            # training-site QA scope is functional UI only; analytics delivery is
-            # explicitly excluded and the tested page/application remains live.
-            context.route(
-                "https://the-internet.herokuapp.com/js/vendor/298279967.js",
-                lambda route: route.abort(),
-            )
-            context.route(
-                "https://298279967.log.optimizely.com/**",
-                lambda route: route.abort(),
-            )
+            # Preserve the target's normal request behavior. Earlier runs that
+            # blocked analytics still returned HTTP 200 while Chromium exposed no
+            # body or controls, so interception is not a justified workaround.
+            # Record failed requests as evidence instead of changing page execution.
             page = context.new_page()
             page.set_default_timeout(15000)
             console_errors: list[str] = []
