@@ -102,7 +102,7 @@ def main() -> int:
             }
             response = None
             try:
-                response = page.goto(checkbox_url, wait_until="commit", timeout=30000)
+                response = page.goto(checkbox_url, wait_until="domcontentloaded", timeout=45000)
                 test1["http_status"] = response.status if response else None
                 if response:
                     try:
@@ -116,7 +116,7 @@ def main() -> int:
                     raise AssertionError(f"Expected 2 checkboxes, observed {count}")
                 initial = [checks.nth(i).is_checked() for i in range(count)]
                 shot = evidence_dir / f"{device}-checkboxes-initial.png"
-                page.screenshot(path=str(shot), full_page=True)
+                page.screenshot(path=str(shot), full_page=True, animations="disabled", timeout=15000)
                 test1["screenshots"].append(str(shot.relative_to(OUT)))
                 changed = []
                 restored = []
@@ -127,7 +127,7 @@ def main() -> int:
                     checks.nth(i).click()
                     restored.append(checks.nth(i).is_checked() == initial[i])
                 final_shot = evidence_dir / f"{device}-checkboxes-restored.png"
-                page.screenshot(path=str(final_shot), full_page=True)
+                page.screenshot(path=str(final_shot), full_page=True, animations="disabled", timeout=15000)
                 test1["screenshots"].append(str(final_shot.relative_to(OUT)))
                 test1["observed"] = {
                     "checkbox_count": count,
@@ -191,7 +191,7 @@ def main() -> int:
             }
             response = None
             try:
-                response = page.goto(add_url, wait_until="commit", timeout=30000)
+                response = page.goto(add_url, wait_until="domcontentloaded", timeout=45000)
                 test2["http_status"] = response.status if response else None
                 if response:
                     try:
@@ -208,7 +208,7 @@ def main() -> int:
                 page.get_by_role("button", name="Delete").first.wait_for(state="visible")
                 after_add = page.get_by_role("button", name="Delete").count()
                 after_add_shot = evidence_dir / f"{device}-add-remove-added.png"
-                page.screenshot(path=str(after_add_shot), full_page=True)
+                page.screenshot(path=str(after_add_shot), full_page=True, animations="disabled", timeout=15000)
                 test2["screenshots"].append(str(after_add_shot.relative_to(OUT)))
                 page.get_by_role("button", name="Delete").first.click()
                 page.wait_for_function("document.querySelectorAll('button.added-manually').length === 0")
