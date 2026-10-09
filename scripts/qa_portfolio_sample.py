@@ -51,11 +51,26 @@ def main() -> int:
                 has_touch=(device == "mobile"),
                 ignore_https_errors=False,
             )
-            # The demo page loads a legacy Optimizely bootstrap synchronously in <head>.
-            # In the Actions runner that script can stall document parsing before <body> exists.
-            # Block only this non-functional analytics bootstrap and its event endpoint; leave
-            # the page's application scripts, styles, and tested controls untouched.
-            context.route("**/js/vendor/298279967.js", lambda route: route.fulfill(status=200, content_type="application/javascript", body=""))
+            # Remove only the legacy analytics <script> element from the two HTML
+            # documents under test. Returning the original document with that non-functional
+            # bootstrap tag removed avoids a parser-blocking third-party script in CI while
+            # preserving the application's own scripts, markup, styles, and tested controls.
+            import re
+
+            def remove_legacy_analytics(route):
+                response = route.fetch()
+                body = response.text()
+                body = re.sub(
+                    r'<script\\s+src=["\\']/js/vendor/298279967\\.js["\\']\\s*>\\s*</script>',
+                    "",
+                    body,
+                    count=1,
+                    flags=re.IGNORECASE,
+                )
+                route.fulfill(response=response, body=body)
+
+            context.route("https://the-internet.herokuapp.com/checkboxes", remove_legacy_analytics)
+            context.route("https://the-internet.herokuapp.com/add_remove_elements/**", remove_legacy_analytics)
             context.route("https://298279967.log.optimizely.com/**", lambda route: route.abort())
             page = context.new_page()
             page.set_default_timeout(15000)
