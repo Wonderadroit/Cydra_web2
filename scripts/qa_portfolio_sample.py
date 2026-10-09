@@ -116,11 +116,20 @@ def main() -> int:
                 test1["status"] = "FAIL"
                 test1["notes"].append(f"{type(exc).__name__}: {exc}")
                 try:
+                    test1["diagnostics"] = {
+                        "final_url": page.url,
+                        "title": page.title(),
+                        "body_text_excerpt": page.locator("body").inner_text(timeout=3000)[:2000],
+                        "body_html_excerpt": page.locator("body").inner_html(timeout=3000)[:4000],
+                    }
+                except Exception as diagnostic_exc:
+                    test1["notes"].append(f"Diagnostic capture failed: {type(diagnostic_exc).__name__}: {diagnostic_exc}")
+                try:
                     shot = evidence_dir / f"{device}-checkboxes-error.png"
-                    page.screenshot(path=str(shot), full_page=True)
+                    page.screenshot(path=str(shot), full_page=False, timeout=5000)
                     test1["screenshots"].append(str(shot.relative_to(OUT)))
-                except Exception:
-                    pass
+                except Exception as screenshot_exc:
+                    test1["notes"].append(f"Error screenshot capture failed: {type(screenshot_exc).__name__}: {screenshot_exc}")
             results.append(test1)
 
             # Test 2: adding and removing a UI element.
@@ -173,11 +182,20 @@ def main() -> int:
                 test2["status"] = "FAIL"
                 test2["notes"].append(f"{type(exc).__name__}: {exc}")
                 try:
+                    test2["diagnostics"] = {
+                        "final_url": page.url,
+                        "title": page.title(),
+                        "body_text_excerpt": page.locator("body").inner_text(timeout=3000)[:2000],
+                        "body_html_excerpt": page.locator("body").inner_html(timeout=3000)[:4000],
+                    }
+                except Exception as diagnostic_exc:
+                    test2["notes"].append(f"Diagnostic capture failed: {type(diagnostic_exc).__name__}: {diagnostic_exc}")
+                try:
                     shot = evidence_dir / f"{device}-add-remove-error.png"
-                    page.screenshot(path=str(shot), full_page=True)
+                    page.screenshot(path=str(shot), full_page=False, timeout=5000)
                     test2["screenshots"].append(str(shot.relative_to(OUT)))
-                except Exception:
-                    pass
+                except Exception as screenshot_exc:
+                    test2["notes"].append(f"Error screenshot capture failed: {type(screenshot_exc).__name__}: {screenshot_exc}")
             results.append(test2)
 
             runtime = {
@@ -324,9 +342,8 @@ def main() -> int:
 
     print(f"QA portfolio run complete: passed={passed} failed={failed}")
     print(f"Artifacts: {OUT / 'report.md'}, {OUT / 'report.pdf'}, {OUT / 'report.json'}, {evidence_dir}")
-    # Exit status describes runner/report-generation success, not whether the target passed every assertion.
-    # Test failures remain explicit in report.json/report.md and must never be silently treated as passes.
-    return 0
+    # A green workflow requires every asserted behavior to pass. Environmental blockers remain failures until triaged.
+    return 0 if failed == 0 else 1
 
 
 if __name__ == "__main__":
