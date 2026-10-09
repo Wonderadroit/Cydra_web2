@@ -67,16 +67,20 @@ def main() -> int:
             context = browser.new_context(
                 viewport=viewport,
                 device_scale_factor=1,
-                is_mobile=False,  # Use a narrow viewport plus touch emulation; avoid Chromium mobile-device mode on this demo.
-                has_touch=(device == "mobile"),
+                is_mobile=False,  # Keep Chromium desktop mode and vary viewport only for responsive-layout checks.
+                has_touch=False,
                 ignore_https_errors=False,
             )
-            # Block the known legacy analytics bootstrap without intercepting the HTML document.
-            # Rewriting the document through route.fetch can hang on transient origin delays and
-            # prevent the actual UI checks from running; leave application HTML untouched.
+            # The legacy analytics bootstrap is unrelated to the controls under test and has
+            # intermittently stalled or failed upstream. Fulfill only that script with empty JS;
+            # do not rewrite HTML or intercept application dependencies.
             context.route(
                 "https://the-internet.herokuapp.com/js/vendor/298279967.js",
-                lambda route: route.abort(),
+                lambda route: route.fulfill(
+                    status=200,
+                    content_type="application/javascript; charset=utf-8",
+                    body="",
+                ),
             )
 
             # Do not intercept the demo's jQuery dependency: route.fetch can stall the
@@ -281,7 +285,8 @@ def main() -> int:
             "browser": "Chromium",
             "browser_version": browser_version,
             "viewports": VIEWPORTS,
-            "mobile_note": "Mobile is a 390x844 browser viewport with touch emulation, not a physical-device certification.",
+            "mobile_note": "Mobile coverage is a 390x844 narrow viewport only; touch interaction and physical-device behavior are not certified.",
+            "test_harness_adjustments": ["The known legacy analytics bootstrap was replaced with an empty JavaScript response because it is not required for the tested controls and has shown upstream instability. HTML and application dependencies were not modified."],
         },
         "summary": {"total": len(results), "passed": passed, "failed": failed},
         "tests": results,
@@ -321,10 +326,10 @@ def main() -> int:
         "",
         "### What this means in plain English",
         "",
-        "- **Checkboxes:** each checkbox changed when selected and returned to its original state when selected again.",
-        "- **Add and remove:** the page added one Delete control after Add Element was selected, then removed it when Delete was selected.",
-        "- **Screen sizes:** the same checks were run at a desktop-sized viewport and a mobile-sized, touch-emulated viewport.",
-        "- **Evidence:** screenshots were captured at the key stages so a reviewer can see what the browser displayed.",
+        f"- **Checkboxes:** {sum(1 for item in results if item['id'].startswith('QA-001') and item['status'] == 'PASS')} of 2 viewport checks passed.",
+        f"- **Add and remove:** {sum(1 for item in results if item['id'].startswith('QA-002') and item['status'] == 'PASS')} of 2 viewport checks passed.",
+        "- **Screen sizes:** desktop viewport 1365×900 and narrow viewport 390×844; this is not physical-device certification.",
+        "- **Evidence:** screenshots and any capture failures are listed with each individual test result.",
         "",
         "## Assessment details",
         "",
@@ -333,7 +338,7 @@ def main() -> int:
         f"- **Run started (UTC):** {started}",
         f"- **Run ended (UTC):** {ended}",
         f"- **Environment:** Chromium {browser_version}; Python {sys.version.split()[0]}",
-        "- **Coverage:** desktop viewport 1365×900 and mobile-emulated viewport 390×844",
+        "- **Coverage:** desktop viewport 1365×900 and narrow viewport 390×844 (viewport-only; no physical-device certification)",
         "- **Evidence:** automated screenshots attached as workflow artifacts",
         "",
         "## Summary",
@@ -392,7 +397,7 @@ def main() -> int:
         "",
         report["interpretation"],
         "",
-        "This is a sample automation run, not a claim of paid client experience. Mobile coverage uses viewport and touch emulation; it does not replace testing on physical devices. Any failure must be independently reproduced and assessed for user impact before being described as a defect.",
+        "This is a sample automation run, not a claim of paid client experience. The narrow viewport is a responsive-layout check only; it does not certify touch behavior or physical devices. The known legacy analytics bootstrap was fulfilled with an empty JavaScript response because it is unrelated to the tested controls and has shown upstream instability; application HTML and application dependencies were not modified. Any failure must be independently reproduced and assessed for user impact before being described as a defect.",
         "",
     ])
     (OUT / "report.md").write_text("\n".join(lines), encoding="utf-8")
