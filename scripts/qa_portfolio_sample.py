@@ -98,14 +98,10 @@ def main() -> int:
                 has_touch=False,
                 ignore_https_errors=False,
             )
-            # Block only the known legacy analytics bootstrap, which is unrelated to
-            # the controls under test and has shown upstream instability. Keep application
-            # dependencies live so the test observes the target's actual behavior.
-            context.route(
-                "https://the-internet.herokuapp.com/js/vendor/298279967.js",
-                lambda route: route.abort(),
-            )
-            context.route("https://298279967.log.optimizely.com/**", lambda route: route.abort())
+            # Do not intercept target requests. The previous run returned HTTP 200 but
+            # the renderer never exposed the document controls; aborting the legacy
+            # analytics bootstrap was a shared variable in every failed viewport.
+            # Observe the page with its normal request behavior and record failures.
             page = context.new_page()
             page.set_default_timeout(15000)
             console_errors: list[str] = []
