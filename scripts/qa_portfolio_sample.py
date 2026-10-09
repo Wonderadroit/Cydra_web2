@@ -33,7 +33,10 @@ def navigate_with_retries(page, url: str, attempts: int = 3):
     last_error = None
     for attempt in range(1, attempts + 1):
         try:
-            response = page.goto(url, wait_until="domcontentloaded", timeout=20000)
+            # Wait for the document response to commit, then let the explicit control
+            # assertions establish readiness. DOMContentLoaded can be blocked by legacy
+            # third-party scripts even when the target response itself is available.
+            response = page.goto(url, wait_until="commit", timeout=12000)
             if response is not None and response.status >= 500 and attempt < attempts:
                 page.wait_for_timeout(1000 * attempt)
                 continue
