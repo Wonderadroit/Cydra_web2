@@ -87,12 +87,12 @@ def main() -> int:
 
     with sync_playwright() as p:
         browser_version = None
+        # Reuse one Chromium process across viewport contexts. CI evidence shows
+        # desktop checks pass, then a second Chromium launch can produce a frozen
+        # renderer for every mobile check. Fresh contexts still isolate viewport state.
+        browser = p.chromium.launch(headless=True, args=["--disable-gpu", "--disable-dev-shm-usage"])
+        browser_version = browser.version
         for device, viewport in VIEWPORTS.items():
-            # Isolate each viewport in its own Chromium process. The public demo has
-            # intermittently left one renderer unresponsive after a previous viewport.
-            browser = p.chromium.launch(headless=True, args=["--disable-gpu", "--disable-dev-shm-usage"])
-            if browser_version is None:
-                browser_version = browser.version
             context = browser.new_context(
                 viewport=viewport,
                 device_scale_factor=1,
@@ -281,7 +281,7 @@ def main() -> int:
             # Close each viewport context before browser teardown so the next viewport
             # starts cleanly; diagnostics above are bounded and already captured.
             context.close()
-            browser.close()
+        browser.close()
 
     ended = utc_now()
     passed = sum(1 for item in results if item["status"] == "PASS")
