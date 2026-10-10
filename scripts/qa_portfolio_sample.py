@@ -90,7 +90,7 @@ def main() -> int:
         for device, viewport in VIEWPORTS.items():
             # Isolate each viewport in its own Chromium process. The public demo has
             # intermittently left one renderer unresponsive after a previous viewport.
-            browser = p.chromium.launch(headless=True)
+            browser = p.chromium.launch(headless=True, args=["--disable-gpu", "--disable-dev-shm-usage"])
             if browser_version is None:
                 browser_version = browser.version
             context = browser.new_context(
