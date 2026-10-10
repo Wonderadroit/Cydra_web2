@@ -10,8 +10,20 @@ import argparse
 import json
 import re
 from pathlib import Path
-from urllib.parse import urljoin, urlparse
+from urllib.parse import urlparse, urlunparse
 
+
+
+def _origin_key(url: str) -> tuple[str, str, int | None]:
+    parsed = urlparse(url)
+    default_port = 443 if parsed.scheme.lower() == "https" else 80
+    return (parsed.scheme.lower(), (parsed.hostname or "").lower(), parsed.port or default_port)
+
+
+def _safe_observed_url(url: str) -> str:
+    """Remove query strings and fragments before writing observed URLs to artifacts."""
+    parsed = urlparse(url)
+    return urlunparse((parsed.scheme, parsed.netloc, parsed.path, parsed.params, "", ""))
 
 
 REGISTER_WORDS = re.compile(r"register|sign[ -]?up|create account|join now|new account", re.I)
@@ -20,13 +32,14 @@ SENSITIVE = re.compile(r"password|secret|token|email|phone|otp|code|captcha", re
 
 def discover(base_url: str, output: Path) -> dict:
     parsed = urlparse(base_url)
-    if parsed.scheme != "https" or not parsed.netloc:
-        raise ValueError("target URL must be an absolute HTTPS URL")
+    if parsed.scheme.lower() != "https" or not parsed.hostname or parsed.username or parsed.password:
+        raise ValueError("target URL must be an absolute HTTPS URL without embedded credentials")
     # Keep module import and non-browser guard tests usable in minimal CI jobs.
     # The browser dependency is required only after the target passes validation.
     from playwright.sync_api import sync_playwright
 
-    origin = f"{parsed.scheme}://{parsed.netloc}"
+    origin = f"https://{parsed.hostname.lower()}" + (f":{parsed.port}" if parsed.port else "")
+    target_origin = _origin_key(base_url)
     report = {"target_origin": origin, "visited": [], "registration_candidates": [], "forms": [], "blocked_external_links": []}
     queue = [base_url]
     seen: set[str] = set()
@@ -39,13 +52,17 @@ def discover(base_url: str, output: Path) -> dict:
             normalized = url.split("#", 1)[0]
             if normalized in seen:
                 continue
-            if urlparse(normalized).netloc != parsed.netloc:
-                report["blocked_external_links"].append(normalized)
+            if _origin_key(normalized) != target_origin:
+                report["blocked_external_links"].append(_safe_observed_url(normalized))
                 continue
             seen.add(normalized)
             try:
                 response = page.goto(normalized, wait_until="domcontentloaded", timeout=20000)
                 page.wait_for_timeout(500)
+                # Do not inspect pages reached through a cross-origin redirect.
+                if _origin_key(page.url) != target_origin:
+                    report["blocked_external_links"].append(_safe_observed_url(page.url))
+                    continue
                 title = page.title()
                 links = page.locator("a[href]").evaluate_all("""els => els.map(a => ({
                     text: (a.innerText || a.getAttribute('aria-label') || '').trim().slice(0,100),
@@ -63,17 +80,17 @@ def discover(base_url: str, output: Path) -> dict:
                         required: !!e.required
                     }))
                 }))""")
-                entry = {"url": normalized, "status": response.status if response else None, "title": title}
+                entry = {"url": _safe_observed_url(normalized), "status": response.status if response else None, "title": title}
                 report["visited"].append(entry)
                 for link in links:
                     if REGISTER_WORDS.search(link["text"]):
-                        candidate = {"url": link["href"], "label": link["text"]}
-                        if urlparse(link["href"]).netloc == parsed.netloc:
+                        candidate = {"url": _safe_observed_url(link["href"]), "label": link["text"]}
+                        if _origin_key(link["href"]) == target_origin:
                             report["registration_candidates"].append(candidate)
                             if link["href"] not in seen and link["href"] not in queue:
                                 queue.append(link["href"])
                         else:
-                            report["blocked_external_links"].append(link["href"])
+                            report["blocked_external_links"].append(_safe_observed_url(link["href"]))
                 for form in forms:
                     if REGISTER_WORDS.search(normalized + " " + title + " " + " ".join(f["label"] for f in form["fields"])):
                         safe_fields = []
@@ -83,7 +100,7 @@ def discover(base_url: str, output: Path) -> dict:
                             if SENSITIVE.search(item["name"] + " " + item["label"]):
                                 item["label"] = "[redacted-sensitive-field]"
                             safe_fields.append(item)
-                        report["forms"].append({"page": normalized, "action": form["action"], "method": form["method"], "fields": safe_fields})
+                        report["forms"].append({"page": _safe_observed_url(normalized), "action": _safe_observed_url(form["action"]), "method": form["method"], "fields": safe_fields})
             except Exception as exc:
                 report["visited"].append({"url": normalized, "error": type(exc).__name__})
         browser.close()
