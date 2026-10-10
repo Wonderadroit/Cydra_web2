@@ -42,7 +42,7 @@ _ID = re.compile(r'^(?:id|uuid|[A-Za-z][A-Za-z0-9]*(?:_id|_uuid|Id|UUID))$', re.
 _PATH = re.compile(r'/(?:api|graphql|rpc|v[0-9]+)(?:/[A-Za-z0-9_.$:@%~+\-{}]+)*')
 _REQUEST = re.compile(r'''\b(?:(fetch)|(axios|api|client|http|request)\.(get|post|put|patch|delete|head|options))\s*\(\s*([^,\)]+)''', re.I)
 _OPEN = re.compile(r'''\.open\s*\(\s*['\"](GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)['\"]\s*,\s*([^,\)]+)''', re.I)
-_ASSIGN = re.compile(r'''\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(['\"])([^'\"]+)\2''')
+_ASSIGN = re.compile(r'''\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(['\"`])([^'\"`]+)\2''')
 _COMBINED = re.compile(r'''\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*([A-Za-z_$][\w$]*)\s*\+\s*(['\"])([^'\"]+)\3''')
 _ORIGIN = re.compile(r'''(?:baseURL|baseUrl|apiBase|apiBaseUrl|API_BASE_URL|API_BASE|apiUrl|apiURL|API_URL|backendUrl|backendURL|BACKEND_URL|serviceUrl|serviceURL|SERVICE_URL|graphqlUrl|graphqlURL|GRAPHQL_URL|endpointUrl|ENDPOINT_URL|apiEndpoint|apiEndpointUrl|apiHost|apiDomain|baseApiUrl|BASE_API_URL|PUBLIC_API_URL|NEXT_PUBLIC_API_URL|VITE_API_URL)\s*[:=]\s*['\"](https?://[^'\"\s]+)''', re.I)
 _CSP = re.compile(r'''(?:connect-src|default-src)\s+([^;]+)''', re.I)
@@ -172,12 +172,18 @@ def _ids(value, path=''):
 
 def _resolve(expr, constants):
     expr=expr.strip().strip('()')
-    if len(expr)>=2 and expr[0] in "'\"" and expr[-1]==expr[0]: return expr[1:-1]
+    if len(expr)>=2 and expr[0] in "'\"\x60" and expr[-1]==expr[0]:
+        value=expr[1:-1]
+        # Only resolve static template literals; interpolation needs real data-flow.
+        return None if expr[0]=="\x60" and "${" in value else value
     parts=re.split(r'\s*\+\s*',expr)
     out=[]
     for part in parts:
         part=part.strip()
-        if len(part)>=2 and part[0] in "'\"" and part[-1]==part[0]: out.append(part[1:-1])
+        if len(part)>=2 and part[0] in "'\"\x60" and part[-1]==part[0]:
+            value=part[1:-1]
+            if part[0]=="\x60" and "${" in value: return None
+            out.append(value)
         elif part in constants: out.append(constants[part])
         else: return None
     return ''.join(out)
