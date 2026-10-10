@@ -30,7 +30,7 @@ def run_read_only_bola_probe(
         raise ValueError("two distinct explicit identity IDs are required")
     if not isinstance(path, str) or not path.startswith("/"):
         raise ValueError("resource path must be an absolute path on the configured target")
-    if "\\r" in path or "\\n" in path:
+    if "\r" in path or "\n" in path:
         raise ValueError("resource path must not contain line breaks")
     parsed_path = urlsplit(path)
     if parsed_path.scheme or parsed_path.netloc or path.startswith("//"):
