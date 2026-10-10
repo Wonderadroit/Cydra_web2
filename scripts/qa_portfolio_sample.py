@@ -242,6 +242,8 @@ def main() -> int:
                 # streaming response body; a stalled body must not hang the entire QA run.
                 add_button = page.get_by_role("button", name="Add Element")
                 page = wait_for_visible_with_one_reload(page, add_button, add_url, test2)
+                # The recovery path may replace the page; reacquire locators from the active page.
+                add_button = page.get_by_role("button", name="Add Element")
                 before = page.get_by_role("button", name="Delete").count()
                 shot = evidence_dir / f"{device}-add-remove-initial.png"
                 page.screenshot(path=str(shot), full_page=True)
