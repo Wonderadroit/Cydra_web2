@@ -24,7 +24,7 @@ def classify_auth_options(items: list[dict], target_url: str) -> dict:
     methods = set()
     observations = []
     for item in items:
-        label = re.sub(r"\\s+", " ", str(item.get("label", "")).strip().lower())
+        label = re.sub(r"\s+", " ", str(item.get("label", "")).strip().lower())
         href = str(item.get("href", "")).strip()
         resolved = urlsplit(urljoin(target_url, href)) if href else None
         text = f"{label} {resolved.hostname.lower() if resolved and resolved.hostname else ''}"
