@@ -10,10 +10,12 @@ def same_origin(candidate: str, target: str) -> bool:
             return False
         if not left.hostname or not right.hostname:
             return False
+        left_port = left.port or (443 if left.scheme.lower() == "https" else 80)
+        right_port = right.port or (443 if right.scheme.lower() == "https" else 80)
         return (
             left.scheme.lower() == right.scheme.lower()
             and left.hostname.lower().rstrip(".") == right.hostname.lower().rstrip(".")
-            and left.port == right.port
+            and left_port == right_port
         )
     except (ValueError, TypeError):
         return False
