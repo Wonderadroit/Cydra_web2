@@ -108,6 +108,7 @@ def discover(base_url: str, output: Path) -> dict:
                             item = dict(field)
                             # Never record input values; sensitive labels are kept as field types only.
                             if SENSITIVE.search(item["name"] + " " + item["label"]):
+                                item["name"] = "[redacted-sensitive-field]"
                                 item["label"] = "[redacted-sensitive-field]"
                             safe_fields.append(item)
                         report["forms"].append({"page": _safe_observed_url(normalized), "action": _safe_observed_url(form["action"]), "method": form["method"], "fields": safe_fields})
