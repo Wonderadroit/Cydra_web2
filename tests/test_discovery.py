@@ -86,3 +86,15 @@ def test_discovery_prioritizes_recovered_api_routes_over_static_assets():
     result = discover(Adapter(), m, seeds=("/app.js",), max_paths=3, max_js_bundles=1)
     assert calls[:2] == ["/app.js", "/v1/me"]
     assert result.resource_ids
+
+
+def test_bundle_origin_provenance_excludes_arbitrary_absolute_links():
+    from cydra_web2.discovery import _analyze_bundle
+    body = (
+        'const docs = "https://example.com/guide"; '
+        'const social = "https://discord.gg/aurory"; '
+        'const API_BASE_URL = "https://api.authorized.example";'
+    )
+    result = _analyze_bundle("/app.js", body, "https://app.authorized.example")
+    assert result.service_origins == ("https://api.authorized.example",)
+    assert result.request_origins == ()
