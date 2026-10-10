@@ -31,6 +31,9 @@ def resource_provenance(model):
             "source_observation_id": resource.source_observation,
             "source_endpoint_id": source.endpoint_id if source else None,
             "source_status_code": source.status_code if source else None,
+            "provenance_valid": bool(source and source.endpoint_id in model.endpoints and resource.source_field_path and resource.source_field_path.strip()),
+            "resource_status": "candidate" if not (source and source.endpoint_id in model.endpoints and resource.source_field_path and resource.source_field_path.strip()) else "unverified_candidate",
+            "provenance_failure": None if (source and source.endpoint_id in model.endpoints and resource.source_field_path and resource.source_field_path.strip()) else "missing source observation, known source endpoint, or source field path",
             "source_field_path": resource.source_field_path,
             "linked_endpoint_ids": linked_endpoints,
         })
