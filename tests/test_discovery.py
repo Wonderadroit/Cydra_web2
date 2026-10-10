@@ -167,3 +167,14 @@ def test_resource_candidate_extraction_excludes_ui_values_and_framework_envelope
     assert not any(value in {"40f6fbff7c4795aaf472c6d16289e727046812f380", "page-loader"} for _, value, _ in values)
     assert ("id", "item-1", "[2].id") in values
     assert ("uuid", "uuid-1", "[2].uuid") in values
+
+
+def test_bare_route_strings_are_candidates_not_confirmed_calls_or_origins():
+    from cydra_web2.discovery import _analyze_bundle, _api_paths
+
+    body = 'const route = "/v1/items"; const docs = "https://example.com/guide";'
+    analysis = _analyze_bundle("/app.js", body, "https://app.authorized.example")
+
+    assert _api_paths(body) == {"/v1/items"}
+    assert analysis.endpoints == ()
+    assert analysis.request_origins == ()
