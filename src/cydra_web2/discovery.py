@@ -143,7 +143,17 @@ def _ids(value, path=''):
             excluded_key = str(k).lower().replace('_', '').replace('-', '') in {
                 "gaid", "analyticsid", "trackingid",
             }
-            if (not excluded_context and not excluded_key
+            excluded_ui_value = isinstance(v, str) and v.casefold() in {
+                "page-loader", "loader-1", "navigation-menu", "consent-default",
+            }
+            framework_envelope_hash = (
+                str(k).lower() == "id"
+                and re.fullmatch(r"\[\d+\]\.id", p) is not None
+                and isinstance(v, str)
+                and re.fullmatch(r"[0-9a-fA-F]{40}", v) is not None
+            )
+            if (not excluded_context and not excluded_key and not excluded_ui_value
+                    and not framework_envelope_hash
                     and _ID.fullmatch(str(k)) and isinstance(v, (str, int))
                     and str(v).strip()):
                 yield str(k), str(v), p
