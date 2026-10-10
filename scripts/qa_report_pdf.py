@@ -48,20 +48,25 @@ def _p(value: object, style) -> Paragraph:
 def _status(report: dict) -> tuple[str, str, colors.Color]:
     summary = report.get("summary") or {}
     tests = report.get("tests") or report.get("results") or []
+    # In a mutation benchmark, an observed FAIL on a mutant is the expected detection.
+    is_benchmark = any("benchmark_pass" in item for item in tests) or "failed_expectations" in summary
+    if is_benchmark:
+        if int(summary.get("failed_expectations", 0) or 0):
+            return ("FAIL", "One or more benchmark expectations were not met. Review the evidence and correct the test harness.", RED)
+        if summary:
+            return ("PASS", "The benchmark expected outcomes were met. This validates benchmark scenarios, not a production application.", GREEN)
     statuses = [str(item.get("status") or item.get("observed") or "").upper() for item in tests]
-    failed = int(summary.get("failed", summary.get("failed_expectations", 0)) or 0)
+    failed = int(summary.get("failed", 0) or 0)
     inconclusive = int(summary.get("inconclusive", 0) or 0)
     if failed or "FAIL" in statuses or any(item == "ATTENTION REQUIRED" for item in statuses):
         return ("FAIL", "One or more checks failed. Review the evidence and reproduce before deciding whether this is a product defect.", RED)
     if inconclusive or "INCONCLUSIVE" in statuses:
         return ("INCONCLUSIVE", "The run could not reach a reliable verdict for at least one check. Resolve the execution blocker and rerun.", AMBER)
-    benchmark_failures = int(summary.get("failed_expectations", 0) or 0)
-    if "PASS" in statuses or (summary and (("passed" in summary and "total" in summary) or ("passed_expectations" in summary and "total_variants" in summary))):
+    if "PASS" in statuses or (summary and "passed" in summary and "total" in summary):
         return ("PASS", "The reported checks met their expected outcomes in this run. This does not certify the entire application.", GREEN)
-    if report.get("summary") and benchmark_failures == 0:
+    if report.get("summary"):
         return ("REVIEW", "A report was generated, but the result format did not provide enough information for an overall verdict.", AMBER)
     return ("INCONCLUSIVE", "There is not enough result data to assign a reliable overall verdict.", AMBER)
-
 
 def _humanize(value: object) -> str:
     return str(value).replace("_", " ").strip().capitalize()
@@ -196,7 +201,15 @@ def render_report(source: Path, destination: Path) -> None:
              Paragraph("What happened / evidence", styles["SmallWhite"])]]
     for item in tests:
         name = item.get("name") or item.get("case") or item.get("id") or "Unnamed check"
-        outcome = item.get("status") or item.get("observed") or ("PASS" if item.get("benchmark_pass") else "FAIL")
+        if "benchmark_pass" in item:
+            if item.get("benchmark_pass") and item.get("variant") == "mutant":
+                outcome = "DETECTED (expected)"
+            elif item.get("benchmark_pass"):
+                outcome = "PASS (expected)"
+            else:
+                outcome = "UNEXPECTED"
+        else:
+            outcome = item.get("status") or item.get("observed") or "INCONCLUSIVE"
         details = item.get("assertion") or item.get("failure_category") or item.get("notes") or item.get("description") or "No detail provided."
         if isinstance(details, list):
             details = "; ".join(str(part) for part in details[:3]) or "No detail provided."
