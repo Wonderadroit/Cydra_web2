@@ -14,6 +14,7 @@ from urllib.parse import urlparse
 
 from cryptography.fernet import Fernet
 from playwright.sync_api import sync_playwright
+from cydra_web2.identity_provisioning import normalize_visible_text
 
 
 LOGIN_MARKERS = (
@@ -333,7 +334,7 @@ def _bootstrap() -> None:
                 try:
                     response = anonymous_page.goto(url, wait_until="domcontentloaded", timeout=30000)
                     body = anonymous_page.locator("body").inner_text(timeout=5000)
-                    normalized = re.sub(r"\s+", " ", body).strip().lower()
+                    normalized = normalize_visible_text(body)
                     anonymous_checks[path] = {"status": response.status if response else None, "final_url": anonymous_page.url, "title": anonymous_page.title(), "body_fingerprint": __import__("hashlib").sha256(normalized.encode()).hexdigest() if normalized else ""}
                 except Exception as exc:
                     anonymous_checks[path] = {"error": type(exc).__name__}
