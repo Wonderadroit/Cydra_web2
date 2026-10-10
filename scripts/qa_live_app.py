@@ -42,6 +42,8 @@ def main():
      try:
       if u.scheme not in ('https','http') or not u.hostname: raise ValueError('unsupported URL')
       h=u.hostname.lower().rstrip('.')
+      if route.request.is_navigation_request() and route.request.frame == page.main_frame and (u.scheme != 'https' or h != host):
+       route.abort(); return
       try: ips=[ipaddress.ip_address(h.strip('[]'))]
       except ValueError: ips=[ipaddress.ip_address(x[4][0].split('%')[0]) for x in socket.getaddrinfo(h,u.port or (443 if u.scheme=='https' else 80),type=socket.SOCK_STREAM)]
       if not ips or any(not x.is_global for x in ips): route.abort(); return
