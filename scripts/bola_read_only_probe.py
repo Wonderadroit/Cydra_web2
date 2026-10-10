@@ -39,6 +39,8 @@ def main() -> int:
             raise ValueError("target URL must be an absolute HTTPS origin or base URL")
         if parsed.username or parsed.password or parsed.query or parsed.fragment:
             raise ValueError("target URL must not contain credentials, query parameters, or a fragment")
+        if parsed.path not in {"", "/"}:
+            raise ValueError("target URL must be an origin; supply the resource path separately")
         if not path.startswith("/") or "\r" in path or "\n" in path:
             raise ValueError("resource path must begin with / and contain no line breaks")
         if not owner_confirmed:
