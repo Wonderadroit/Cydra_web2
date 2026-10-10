@@ -41,9 +41,12 @@ _CSP = re.compile(r'''(?:connect-src|default-src)\s+([^;]+)''', re.I)
 
 def _api_paths(body: str):
     out = set()
-    for token in re.findall(r'''['\"]([^'\"]+)['\"]''', body):
+    # Do not parse the scheme/hostname portion of absolute URLs as route paths
+    # (e.g. the //api in https://api.example.com is not an /api endpoint).
+    scan_body = re.sub(r'''https?://[^'\"]+''', '', body, flags=re.I)
+    for token in re.findall(r'''['\"]([^'\"]+)['\"]''', scan_body):
         if re.match(r'^/(?:api|graphql|rpc|v[0-9]+)(?:/|$)', token, re.I): out.add(token.split('?',1)[0])
-    for m in _PATH.finditer(body): out.add(m.group(0).split('?',1)[0])
+    for m in _PATH.finditer(scan_body): out.add(m.group(0).split('?',1)[0])
     return out
 
 def _documents(body: str):
