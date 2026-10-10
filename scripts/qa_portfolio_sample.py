@@ -119,7 +119,7 @@ def _run_test_once(playwright, device, viewport, kind):
             bounded_diagnostics(page, test, f"{device}-{kind}")
     finally:
         test["runtime_observations"] = obs
-        for obj in (context, browser):
+        for obj in (browser,):
             if obj is not None:
                 try:
                     obj.close()
