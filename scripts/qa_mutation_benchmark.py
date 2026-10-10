@@ -52,21 +52,26 @@ def assert_contract(page, case_name: str) -> list[dict]:
         })
     })""")
     candidates = generate_test_candidates(snapshot)
-    candidate_ids = {candidate["id"] for candidate in candidates}
-    if case_name == "checkbox_toggle":
-        assert "checkbox_toggle_restore" in candidate_ids, "candidate generator missed observed checkbox"
-    elif case_name == "required_validation":
-        assert any(item.startswith("required_validation_") for item in candidate_ids), (
-            "candidate generator missed required intent signaled by the field label"
-        )
 
-    if case_name == "checkbox_toggle":
-        control = page.locator("#flag")
-        before = control.is_checked()
-        control.click(timeout=1000)
-        after = control.is_checked()
-        assert after != before, f"checkbox state did not change (before={before}, after={after})"
-    elif case_name == "add_element":
+    # Execute the generated candidate, not a case-name-specific substitute.
+    for candidate in candidates:
+        if candidate["id"] == "checkbox_toggle_restore":
+            control = page.locator('input[type="checkbox"]').first
+            before = control.is_checked()
+            control.click(timeout=1000)
+            after = control.is_checked()
+            assert after != before, f"checkbox state did not change (before={before}, after={after})"
+            control.click(timeout=1000)
+            assert control.is_checked() == before, "checkbox state did not restore"
+        elif candidate["id"].startswith("required_validation_"):
+            control = page.locator("input, select, textarea").nth(candidate["evidence"]["control_index"])
+            valid = control.evaluate("(el) => el.checkValidity()")
+            assert valid is False, (
+                f"required-intent control unexpectedly passed validation: "
+                f"{candidate['evidence']['label']}"
+            )
+
+    if case_name == "add_element":
         before = page.locator("#items li").count()
         page.locator("#add").click(timeout=1000)
         after = page.locator("#items li").count()
@@ -74,13 +79,9 @@ def assert_contract(page, case_name: str) -> list[dict]:
     elif case_name == "delete_element":
         page.locator("#delete").click(timeout=1000)
         assert page.locator("#delete").count() == 0, "delete action left its target in the DOM"
-    elif case_name == "required_validation":
-        valid = page.locator("#form").evaluate("(form) => form.checkValidity()")
-        assert valid is False, "empty required email form unexpectedly passed validation"
-    else:
+    elif case_name not in {"checkbox_toggle", "required_validation"}:
         raise ValueError(f"unknown case: {case_name}")
     return candidates
-
 
 def run_variant(playwright, case_name: str, variant: str, html: str) -> dict:
     browser = playwright.chromium.launch(headless=True, args=["--disable-gpu", "--disable-dev-shm-usage"])
