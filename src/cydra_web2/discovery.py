@@ -72,7 +72,7 @@ def _documents(body: str):
         # argument, then parse chunks that are themselves JSON documents.
         if "self.__next_f.push" not in source:
             continue
-        for match in re.finditer(r'self\.__next_f\.push\(\s*(\[[^\n]*?\])\s*\)', source):
+        for match in re.finditer(r'self\.__next_f\.push\(\s*(\[[\s\S]*?\])\s*\)', source, re.S):
             try:
                 payload = json.loads(match.group(1))
             except (TypeError,json.JSONDecodeError):
@@ -82,16 +82,42 @@ def _documents(body: str):
             for chunk in payload:
                 if not isinstance(chunk, str):
                     continue
-                _, sep, candidate = chunk.partition(":")
-                if not sep:
-                    continue
-                try:
-                    value = json.loads(candidate)
-                except (TypeError,json.JSONDecodeError):
-                    continue
-                if isinstance(value, (dict,list)):
-                    docs.append(value)
-    return docs
+                # Flight payloads can contain multiple newline-delimited records.
+                for record in chunk.splitlines() or [chunk]:
+                    _, sep, candidate = record.partition(":")
+                    if not sep:
+                        continue
+                    try:
+                        value = json.loads(candidate)
+                    except (TypeError,json.JSONDecodeError):
+                        # Recover only complete JSON fragments embedded in a larger
+                        # Flight record; arbitrary text is never treated as an ID.
+                        decoder = json.JSONDecoder()
+                        for index, char in enumerate(candidate):
+                            if char not in "[{":
+                                continue
+                            try:
+                                fragment, _ = decoder.raw_decode(candidate[index:])
+                            except json.JSONDecodeError:
+                                continue
+                            if isinstance(fragment, (dict, list)):
+                                docs.append(fragment)
+                    else:
+                        if isinstance(value, (dict, list)):
+                            docs.append(value)
+    # Deduplicate identical hydration documents while preserving first-seen order.
+    unique = []
+    fingerprints = set()
+    for doc in docs:
+        try:
+            fingerprint = json.dumps(doc, sort_keys=True, separators=(",", ":"))
+        except (TypeError, ValueError):
+            unique.append(doc)
+            continue
+        if fingerprint not in fingerprints:
+            fingerprints.add(fingerprint)
+            unique.append(doc)
+    return unique
 def _ids(value, path=''):
     if isinstance(value,dict):
         for k,v in value.items():
