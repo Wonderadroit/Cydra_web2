@@ -4,7 +4,7 @@ import os
 from pathlib import Path
 
 from cydra_web2.adapter import HttpAdapter, TargetConfig
-from cydra_web2.artifact import campaign_artifact, dumps_artifact
+from cydra_web2.artifact import campaign_artifact, dumps_artifact, ownership_next_experiments, resource_provenance
 from cydra_web2.discovery import discover
 from cydra_web2.hypothesis import HypothesisPlanner
 from cydra_web2.model import TargetModel
@@ -68,6 +68,8 @@ def main() -> int:
             {"id": o.id, "endpoint": o.endpoint_id, "status_code": o.status_code, "identity_id": o.identity_id, "body_size": o.body_length, "fingerprint": o.body_sha256}
             for o in result.observations
         ],
+        "resources": resource_provenance(model),
+        "next_experiments": ownership_next_experiments(model),
         "bundle_frontier": [
             {"path": a.path, "methods": list(a.methods), "endpoints": [{"method": m, "path": p} for m, p in a.endpoints], "service_origins": list(a.service_origins), "request_origins": [{"value": v, "origin": o} for v, o in a.request_origins], "unresolved": list(a.unresolved)}
             for a in result.bundle_analyses
