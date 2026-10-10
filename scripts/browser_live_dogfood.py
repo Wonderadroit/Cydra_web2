@@ -76,7 +76,7 @@ def main():
                     observed_paths.add(parsed.path or "/")
             browser_observations.append({
                 "identity":identity.identity_id,
-                "final_url":page.url,
+                "final_url": safe_observed_url(page.url, config.target.base_url) or "external_or_cross_origin",
                 "title":page.title(),
                 "network_requests":[x for x in network if x["method"] in {"GET","POST","PUT","PATCH","DELETE"}][:200],
                 "observed_paths":sorted(observed_paths)[:250],
