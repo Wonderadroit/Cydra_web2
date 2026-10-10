@@ -1,0 +1,35 @@
+name: CYDRA seeded-defect benchmark
+
+on:
+  workflow_dispatch:
+  pull_request:
+    types: [opened, reopened, synchronize]
+
+permissions:
+  contents: read
+
+jobs:
+  seeded-defect-benchmark:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install browser test dependency
+        timeout-minutes: 5
+        run: |
+          python -m pip install -e ".[browser]"
+          python -m playwright install chromium
+      - name: Verify known-good controls and seeded defects
+        timeout-minutes: 5
+        run: python scripts/qa_mutation_benchmark.py
+      - name: Upload benchmark report and screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cydra-seeded-defect-benchmark
+          path: artifacts/qa-mutation-benchmark/
+          if-no-files-found: warn
+          retention-days: 30
