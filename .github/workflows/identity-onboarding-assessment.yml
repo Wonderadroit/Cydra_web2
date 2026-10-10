@@ -1,6 +1,11 @@
 name: Web2 identity onboarding assessment
 
 on:
+  pull_request:
+    paths:
+      - ".github/workflows/identity-onboarding-assessment.yml"
+      - "scripts/identity_provisioning_assessment.py"
+      - "src/cydra_web2/identity_provisioning.py"
   workflow_dispatch:
     inputs:
       target_url:
