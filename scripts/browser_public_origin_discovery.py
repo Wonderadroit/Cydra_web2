@@ -26,11 +26,18 @@ def is_api_path(path: str) -> bool:
 
 def classify_origin_scope(origin: str, allowed_hosts: set[str]) -> dict:
     """Classify an observed origin without treating discovery as authorization."""
-    parts = safe_url_parts(origin)
-    parsed = urlsplit(origin)
-    hostname = (parsed.hostname or "").lower().rstrip(".")
+    try:
+        parts = safe_url_parts(origin)
+        parsed = urlsplit(origin)
+        hostname = (parsed.hostname or "").lower().rstrip(".")
+        # Accessing .port validates malformed/out-of-range port values.
+        _ = parsed.port
+    except (TypeError, ValueError):
+        parts = None
+        parsed = None
+        hostname = ""
     approved = {host.lower().rstrip(".") for host in allowed_hosts if host.strip()}
-    if parts is None or parsed.scheme.lower() != "https":
+    if parts is None or parsed is None or parsed.scheme.lower() != "https":
         return {"origin": origin, "hostname": hostname or None, "classification": "blocked", "reason": "origin is not a valid HTTPS URL"}
     if hostname not in approved:
         return {"origin": origin, "hostname": hostname, "classification": "unapproved", "reason": "host is not in the explicit allowlist; observation does not grant scope"}
