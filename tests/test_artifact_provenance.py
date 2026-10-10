@@ -52,3 +52,18 @@ def test_empty_anonymous_model_reports_blocked_resource_state_acquisition():
     assert experiment["resource_id"] is None
     assert "no authenticated identities" in experiment["blocked_reason"]
     assert "identity-bound evidence" in experiment["safety_gate"]
+
+
+def test_missing_source_provenance_remains_candidate_and_fails_closed():
+    model = TargetModel("https://authorized.example")
+    model.add_endpoint(Endpoint("GET /items", "GET", "/items"))
+    model.add_resource(Resource(
+        "resource:r2", "uuid", None, "item-2", "obs:missing", ""
+    ))
+
+    record, = resource_provenance(model)
+    assert record["provenance_valid"] is False
+    assert record["resource_status"] == "candidate"
+    assert record["source_observation_id"] == "obs:missing"
+    assert record["source_endpoint_id"] is None
+    assert record["provenance_failure"]
