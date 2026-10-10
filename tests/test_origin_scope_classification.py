@@ -1,3 +1,10 @@
+import sys
+from pathlib import Path
+
+# The repository is not installed as a `scripts` package; make script imports
+# deterministic across pytest invocation modes used by different CI workflows.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
 from scripts.browser_public_origin_discovery import classify_origin_scope
 
 
