@@ -1,0 +1,62 @@
+name: CYDRA read-only BOLA probe
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_url:
+        description: "HTTPS base URL of an application you own or are explicitly authorized to test"
+        required: true
+        type: string
+      resource_path:
+        description: "Exact same-origin GET path for one test object, e.g. /api/records/42"
+        required: true
+        type: string
+      resource_marker:
+        description: "Exact object-specific marker expected in the owner's response (e.g. a test object's unique ID)"
+        required: true
+        type: string
+      authorization_confirmed:
+        description: "I own this target or have explicit permission for this read-only test"
+        required: true
+        type: boolean
+        default: false
+      owner_control_confirmed:
+        description: "The owner identity exclusively controls this test object; it is not public/shared"
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  read-only-bola-probe:
+    if: ${{ inputs.authorization_confirmed == true && inputs.owner_control_confirmed == true }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: live-dogfood
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install CYDRA package
+        run: python -m pip install --no-deps -e .
+      - name: Run bounded read-only cross-identity probe
+        env:
+          CYDRA_BOLA_TARGET_URL: ${{ inputs.target_url }}
+          CYDRA_BOLA_RESOURCE_PATH: ${{ inputs.resource_path }}
+          CYDRA_BOLA_RESOURCE_MARKER: ${{ inputs.resource_marker }}
+          CYDRA_BOLA_OWNER_CONTROL_CONFIRMED: ${{ inputs.owner_control_confirmed }}
+          CYDRA_BOLA_OWNER_HEADERS_JSON: ${{ secrets.CYDRA_BOLA_OWNER_HEADERS_JSON }}
+          CYDRA_BOLA_COMPARISON_HEADERS_JSON: ${{ secrets.CYDRA_BOLA_COMPARISON_HEADERS_JSON }}
+          CYDRA_BOLA_OUT: artifacts/bola-read-only-probe/report.json
+        run: python scripts/bola_read_only_probe.py
+      - name: Upload sanitized probe report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cydra-read-only-bola-probe
+          path: artifacts/bola-read-only-probe/
+          if-no-files-found: warn
+          retention-days: 30
