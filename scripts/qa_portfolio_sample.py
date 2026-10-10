@@ -14,10 +14,19 @@ from playwright.sync_api import TimeoutError as PlaywrightTimeoutError, sync_pla
 
 TARGET = "https://the-internet.herokuapp.com"
 OUT = Path(os.environ.get("CYDRA_QA_OUT", "artifacts/qa-portfolio"))
-VIEWPORTS = {
+ALL_VIEWPORTS = {
     "desktop": {"width": 1365, "height": 900},
     "mobile": {"width": 390, "height": 844},
 }
+# Each viewport runs in its own GitHub-hosted job to isolate Chromium renderer
+# state. "all" remains available for a local combined run.
+_requested_viewport = os.environ.get("CYDRA_QA_VIEWPORT", "all").strip().lower()
+if _requested_viewport not in {"all", *ALL_VIEWPORTS}:
+    raise ValueError("CYDRA_QA_VIEWPORT must be 'all', 'desktop', or 'mobile'.")
+VIEWPORTS = (
+    ALL_VIEWPORTS if _requested_viewport == "all"
+    else {_requested_viewport: ALL_VIEWPORTS[_requested_viewport]}
+)
 
 
 def utc_now() -> str:
