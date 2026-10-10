@@ -330,7 +330,7 @@ def main() -> int:
             "browser_version": browser_version,
             "viewports": VIEWPORTS,
             "mobile_note": "Mobile coverage is a 390x844 narrow viewport only; touch interaction and physical-device behavior are not certified.",
-            "test_harness_adjustments": ["The legacy Optimizely analytics script is replaced with an empty successful JavaScript response, and its telemetry endpoint is blocked, to isolate third-party analytics without surfacing an intentional failed-script request; tested application requests are not intercepted."],
+            "test_harness_adjustments": ["Baseline browser checks do not intercept page resources or target requests; third-party telemetry failures may appear in runtime observations."],
         },
         "summary": {"total": len(results), "passed": passed, "failed": failed},
         "tests": results,
@@ -441,7 +441,7 @@ def main() -> int:
         "",
         report["interpretation"],
         "",
-        "This is a sample automation run, not a claim of paid client experience. The narrow viewport is a responsive-layout check only; it does not certify touch behavior or physical devices. The legacy Optimizely analytics script and telemetry endpoint are isolated; tested application requests are not intercepted, and failed requests/runtime errors are recorded. Any failure must be independently reproduced and assessed for user impact before being described as a defect.",
+        "This is a sample automation run, not a claim of paid client experience. The narrow viewport is a responsive-layout check only; it does not certify touch behavior or physical devices. Page resources and target requests are not intercepted; third-party telemetry failures may appear in runtime observations and are not automatically application defects. Any failure must be independently reproduced and assessed for user impact before being described as a defect.",
         "",
     ])
     (OUT / "report.md").write_text("\n".join(lines), encoding="utf-8")
