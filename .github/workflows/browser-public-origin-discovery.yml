@@ -17,6 +17,11 @@ on:
         required: false
         default: "3000"
         type: string
+      allowed_hosts:
+        description: "Additional explicitly approved hostnames, comma-separated; target hostname is always included"
+        required: false
+        default: ""
+        type: string
 
 permissions:
   contents: read
@@ -29,6 +34,7 @@ jobs:
       CYDRA_TARGET_URL: ${{ inputs.target_url }}
       CYDRA_DISCOVERY_SEED_PATH: ${{ inputs.seed_path }}
       CYDRA_BROWSER_WAIT_MS: ${{ inputs.wait_ms }}
+      CYDRA_ALLOWED_HOSTS: ${{ inputs.allowed_hosts }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

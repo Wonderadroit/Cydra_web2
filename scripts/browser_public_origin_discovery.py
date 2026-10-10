@@ -24,6 +24,26 @@ def is_api_path(path: str) -> bool:
     return API_PATH.match(path) is not None
 
 
+def classify_origin_scope(origin: str, allowed_hosts: set[str]) -> dict:
+    """Classify an observed origin without treating discovery as authorization."""
+    try:
+        parts = safe_url_parts(origin)
+        parsed = urlsplit(origin)
+        hostname = (parsed.hostname or "").lower().rstrip(".")
+        # Accessing .port validates malformed/out-of-range port values.
+        _ = parsed.port
+    except (TypeError, ValueError):
+        parts = None
+        parsed = None
+        hostname = ""
+    approved = {host.lower().rstrip(".") for host in allowed_hosts if host.strip()}
+    if parts is None or parsed is None or parsed.scheme.lower() != "https":
+        return {"origin": origin, "hostname": hostname or None, "classification": "blocked", "reason": "origin is not a valid HTTPS URL"}
+    if hostname not in approved:
+        return {"origin": origin, "hostname": hostname, "classification": "unapproved", "reason": "host is not in the explicit allowlist; observation does not grant scope"}
+    return {"origin": origin, "hostname": hostname, "classification": "approved", "reason": "hostname exactly matches the explicit allowlist"}
+
+
 def summarize_api_origins(requests: list[dict], target_host: str) -> dict:
     api_requests = [item for item in requests if is_api_path(item.get("path", ""))]
     external_origins = sorted({
@@ -147,6 +167,20 @@ def main() -> int:
     ]
     response_rows = sorted(responses, key=lambda item: (item["origin"], item["path"], item["method"], item["status_code"]))
     summary = summarize_api_origins(request_rows, target_host)
+    # The target hostname is the only implicit allowlist entry. Additional
+    # hosts must be explicitly supplied by the operator as hostnames, not URLs.
+    configured_hosts = {
+        host.strip().lower().rstrip(".")
+        for host in os.environ.get("CYDRA_ALLOWED_HOSTS", "").split(",")
+        if host.strip()
+    }
+    if any("/" in host or ":" in host or "@" in host for host in configured_hosts):
+        raise ValueError("CYDRA_ALLOWED_HOSTS must contain hostnames only, comma-separated")
+    allowed_hosts = configured_hosts | {target_host}
+    origin_scope = [
+        classify_origin_scope(origin, allowed_hosts)
+        for origin in sorted({item["origin"] for item in summary["api_requests"]})
+    ]
     output = {
         "target": target.base_url,
         "mode": "anonymous-passive-browser-origin-observation",
@@ -158,10 +192,13 @@ def main() -> int:
         "api_requests": summary["api_requests"],
         "api_responses": response_rows,
         "candidate_service_origins": summary["candidate_service_origins"],
+        "origin_scope_classification": origin_scope,
+        "explicit_allowed_hosts": sorted(allowed_hosts),
         "same_origin_api_requests": summary["same_origin_api_requests"],
         "limitations": [
             "This workflow observes browser-generated requests only; it does not replay, fuzz, or mutate API requests.",
             "Candidate service origins are observations, not proof of endpoint ownership or authorization.",
+            "Origin scope classification is informational for the report; active requests must still pass the runtime target allowlist.",
             "Request query strings, fragments, headers, cookies, and bodies are not written to the artifact.",
             "Anonymous browser observations cannot establish user-resource ownership or prove an authorization flaw.",
         ],
