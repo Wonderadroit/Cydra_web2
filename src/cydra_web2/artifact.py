@@ -65,6 +65,25 @@ def ownership_next_experiments(model):
             ],
             "safety_gate": "Do not claim IDOR or attempt cross-account access until ownership and scope are established.",
         })
+    if not experiments and not model.resources and not model.identities:
+        return [{
+            "id": "acquire-authenticated-resource-state",
+            "kind": "resource_state_acquisition",
+            "resource_id": None,
+            "status": "blocked",
+            "blocked_reason": "Anonymous discovery produced no credible owner-controlled resource candidates and has no authenticated identities.",
+            "required_capabilities": [
+                "target-authorized test identity with a known owner context",
+                "normal authenticated UI/API flow that returns an owner-controlled resource",
+            ],
+            "procedure": [
+                "Use the normal authorized application flow with a target-approved test identity.",
+                "Capture the authenticated request and response for a resource whose owner context is known.",
+                "Preserve the identity, endpoint, resource identifier, response, and source field path as evidence.",
+                "Only if scope permits, compare a read-only request under a second authorized identity.",
+            ],
+            "safety_gate": "Do not infer ownership from public metadata or claim an authorization flaw without identity-bound evidence.",
+        }]
     return experiments
 
 def dumps_artifact(data)->str:
