@@ -21,6 +21,9 @@ def test_resource_report_preserves_source_provenance_and_endpoint_link():
         "source_observation_id": "obs:source",
         "source_endpoint_id": "GET /items",
         "source_status_code": 200,
+        "provenance_valid": True,
+        "resource_status": "unverified_candidate",
+        "provenance_failure": None,
         "source_field_path": "items[0].uuid",
         "linked_endpoint_ids": ["GET /items"],
     }]
