@@ -148,3 +148,12 @@ def test_nextjs_flight_deduplicates_repeated_hydration_payloads():
     payload = r'''<script>self.__next_f.push([1,"1:{\"item\":{\"id\":\"same-item\"}}"]);self.__next_f.push([1,"1:{\"item\":{\"id\":\"same-item\"}}"]);</script>'''
     docs = _documents(payload)
     assert sum(1 for doc in docs if isinstance(doc, dict) and doc.get("item", {}).get("id") == "same-item") == 1
+
+
+def test_resource_candidate_extraction_excludes_ui_telemetry_and_public_media_ids():
+    from cydra_web2.discovery import _documents, _ids
+
+    docs = _documents('{"topNews":[{"id":"article-1","thumbnail":{"id":"image-1"},"banner":{"id":"banner-1"}}],"navigation":{"id":"menu-1"},"gaId":"G-123","items":[{"uuid":"item-9"}]}')
+    values = {(key, value, path) for doc in docs for key, value, path in _ids(doc)}
+    assert ("uuid", "item-9", "items[0].uuid") in values
+    assert not any(value in {"article-1", "image-1", "banner-1", "menu-1", "G-123"} for _, value, _ in values)
