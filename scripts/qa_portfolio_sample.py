@@ -8,6 +8,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlparse
 from playwright.sync_api import sync_playwright
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+from cydra_web2.qa_results import classify_exception
 
 REFERENCE_TARGET = "https://the-internet.herokuapp.com"
 TARGET = "local deterministic browser fixture"
@@ -51,7 +53,7 @@ def _run_test_once(playwright, device, viewport, kind):
     url = "local://checkboxes" if kind == "checkboxes" else "local://add_remove_elements/"
     test = {"id": f"{'QA-001' if kind == 'checkboxes' else 'QA-002'}-{device}",
             "name": "Checkboxes toggle and restore state" if kind == "checkboxes" else "Add/remove element control updates the page",
-            "url": url, "status": "FAIL", "steps": [], "observed": {}, "screenshots": [], "notes": []}
+            "url": url, "status": "INCONCLUSIVE", "failure_category": None, "steps": [], "observed": {}, "screenshots": [], "notes": []}
     obs = {"console_errors": [], "page_errors": [], "failed_requests": [], "http_errors": [], "blocked_telemetry_requests": 0}
     browser = context = page = None
     try:
@@ -117,6 +119,7 @@ def _run_test_once(playwright, device, viewport, kind):
         test["screenshots"].append(str(shot.relative_to(OUT)))
         test["status"] = "PASS"
     except Exception as exc:
+        test["status"], test["failure_category"] = classify_exception(exc)
         test["notes"].append(f"{type(exc).__name__}: {str(exc)[:1200]}")
         if page is not None and not page.is_closed():
             bounded_diagnostics(page, test, f"{device}-{kind}")
@@ -167,6 +170,7 @@ def main():
     ended = utc_now()
     passed = sum(item["status"] == "PASS" for item in results)
     failed = sum(item["status"] == "FAIL" for item in results)
+    inconclusive = sum(item["status"] == "INCONCLUSIVE" for item in results)
     report = {"title": "CYDRA Website Quality Assurance", "target": TARGET,
               "reference_target": REFERENCE_TARGET,
               "target_type": "Deterministic local browser fixture; the public demo host is reference-only and is not represented as tested.",
@@ -177,19 +181,20 @@ def main():
                               "test_harness_adjustments": ["Every check runs in a new Chromium process, context, and page.",
                                   "Interactions use deterministic local HTML fixtures because the reference host stalled before creating a body in hosted CI.",
                                   "Navigation and renderer diagnostics use bounded timeouts."]},
-              "summary": {"total": len(results), "passed": passed, "failed": failed}, "tests": results,
-              "interpretation": "A failed test is a test discrepancy, not automatically a production defect. Telemetry isolation is not proof telemetry caused prior failures."}
+              "summary": {"total": len(results), "passed": passed, "failed": failed, "inconclusive": inconclusive}, "tests": results,
+              "interpretation": "FAIL is reserved for explicit behavioral assertion failures. INCONCLUSIVE means execution or environment prevented a reliable verdict. Neither status alone proves a production defect. Telemetry isolation is not proof telemetry caused prior failures."}
     write_json(OUT / "report.json", report)
-    lines = ["# CYDRA Website Quality Assurance", "", f"Result: {'PASS' if failed == 0 else 'ATTENTION REQUIRED'}",
-             f"Prepared: {ended}", f"Target: {TARGET}", "", f"Checks: {len(results)} total; {passed} passed; {failed} failed.", "",
+    lines = ["# CYDRA Website Quality Assurance", "", f"Result: {'PASS' if failed == 0 and inconclusive == 0 else 'ATTENTION REQUIRED'}",
+             f"Prepared: {ended}", f"Target: {TARGET}", "", f"Checks: {len(results)} total; {passed} passed; {failed} failed; {inconclusive} inconclusive.", "",
              "Each check uses a separate Chromium process and deterministic local HTML fixture. The public reference host is not used for interaction checks because it repeatedly returned a navigation with no body in hosted CI. Narrow-viewport sample only; not physical-device certification.", ""]
     for item in results:
-        lines += [f"## {item['id']}: {item['name']}", f"Status: {item['status']}", f"URL: {item['url']}",
+        lines += [f"## {item['id']}: {item['name']}", f"Status: {item['status']}", f"Failure category: {item.get('failure_category') or 'none'}", f"URL: {item['url']}",
                   f"HTTP: {item.get('http_status')}", "", "Observed JSON:", json.dumps(item.get("observed", {}), indent=2), "",
                   "Notes:", *[f"- {note}" for note in item["notes"]], "", "Runtime observations:",
                   json.dumps(item.get("runtime_observations", {}), indent=2)[:6000], ""]
     (OUT / "report.md").write_text("\n".join(lines), encoding="utf-8")
-    return 0 if failed == 0 else 1
+    # Inconclusive execution must not produce a green QA workflow.
+    return 0 if failed == 0 and inconclusive == 0 else 1
 
 if __name__ == "__main__":
     raise SystemExit(main())
