@@ -145,7 +145,7 @@ def run_test(playwright, device, viewport, kind):
         readiness_failure = (result.get("http_status") is None or
                              "waiting for locator(\"body\")" in first_note or
                              "waiting until \"commit\"" in first_note or
-                             "waiting for locator(\"input[type=\\"checkbox\\"]" in first_note)
+                             '"checkbox"' in first_note)
         if not readiness_failure or attempt == 2:
             result["recovery_attempts"] = attempts
             return result
