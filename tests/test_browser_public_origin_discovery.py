@@ -1,4 +1,13 @@
-from scripts.browser_public_origin_discovery import is_api_path, safe_url_parts, summarize_api_origins
+from importlib.util import module_from_spec, spec_from_file_location
+from pathlib import Path
+
+_SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "browser_public_origin_discovery.py"
+_SPEC = spec_from_file_location("browser_public_origin_discovery", _SCRIPT)
+_MODULE = module_from_spec(_SPEC)
+_SPEC.loader.exec_module(_MODULE)
+is_api_path = _MODULE.is_api_path
+safe_url_parts = _MODULE.safe_url_parts
+summarize_api_origins = _MODULE.summarize_api_origins
 
 
 def test_safe_url_parts_drops_query_and_fragment():
