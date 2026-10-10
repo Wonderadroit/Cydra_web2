@@ -100,10 +100,11 @@ def main() -> int:
                 has_touch=False,
                 ignore_https_errors=False,
             )
-            # CI evidence shows the legacy Optimizely telemetry host repeatedly
-            # fails DNS resolution and correlates with a renderer that never exposes
-            # the document. Isolate only this third-party analytics endpoint; tested
-            # page assets and application requests remain unmodified.
+            # A/B comparison: runs without this legacy third-party analytics script
+            # had renderer stalls on all four checks; retain this narrow script route
+            # alongside the known telemetry endpoint route. Application assets and
+            # tested page requests remain unmodified.
+            context.route("https://the-internet.herokuapp.com/js/vendor/298279967.js", lambda route: route.abort())
             context.route("https://298279967.log.optimizely.com/**", lambda route: route.abort())
             page = context.new_page()
             page.set_default_timeout(15000)
@@ -298,7 +299,7 @@ def main() -> int:
             "browser_version": browser_version,
             "viewports": VIEWPORTS,
             "mobile_note": "Mobile coverage is a 390x844 narrow viewport only; touch interaction and physical-device behavior are not certified.",
-            "test_harness_adjustments": ["The known legacy Optimizely telemetry endpoint is isolated because CI evidence shows repeated DNS failures and renderer stalls; tested application requests are not intercepted."],
+            "test_harness_adjustments": ["The legacy Optimizely analytics script and telemetry endpoint are isolated after repeated CI runs showed renderer stalls when the script was allowed; tested application requests are not intercepted."],
         },
         "summary": {"total": len(results), "passed": passed, "failed": failed},
         "tests": results,
@@ -409,7 +410,7 @@ def main() -> int:
         "",
         report["interpretation"],
         "",
-        "This is a sample automation run, not a claim of paid client experience. The narrow viewport is a responsive-layout check only; it does not certify touch behavior or physical devices. Only the known legacy Optimizely telemetry endpoint is isolated; tested application requests are not intercepted, and failed requests/runtime errors are recorded. Any failure must be independently reproduced and assessed for user impact before being described as a defect.",
+        "This is a sample automation run, not a claim of paid client experience. The narrow viewport is a responsive-layout check only; it does not certify touch behavior or physical devices. The legacy Optimizely analytics script and telemetry endpoint are isolated; tested application requests are not intercepted, and failed requests/runtime errors are recorded. Any failure must be independently reproduced and assessed for user impact before being described as a defect.",
         "",
     ])
     (OUT / "report.md").write_text("\n".join(lines), encoding="utf-8")
