@@ -30,8 +30,8 @@ CASES = {
         "description": "Delete action must remove its target element.",
     },
     "required_validation": {
-        "good": """<!doctype html><html><body><form id="form"><input id="email" type="email" required><button>Submit</button></form></body></html>""",
-        "mutant": """<!doctype html><html><body><form id="form"><input id="email" type="email"><button>Submit</button></form></body></html>""",
+        "good": """<!doctype html><html><body><form id="form"><label for="email">Email *</label><input id="email" type="email" required><button>Submit</button></form></body></html>""",
+        "mutant": """<!doctype html><html><body><form id="form"><label for="email">Email *</label><input id="email" type="email"><button>Submit</button></form></body></html>""",
         "description": "An empty required email field must fail native form validation.",
     },
 }
