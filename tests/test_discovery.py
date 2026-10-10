@@ -214,3 +214,64 @@ def test_discovery_prioritizes_script_bundles_before_route_string_noise():
     modeled = {(endpoint.method, endpoint.path) for endpoint in model.endpoints.values()}
     assert ("GET", "/v1/profile") in modeled
     assert ("POST", "/v1/session") in modeled
+
+
+def test_resource_acquisition_rejects_non_success_responses_even_when_json_has_ids():
+    from types import SimpleNamespace
+    from cydra_web2.discovery import discover
+
+    class Adapter:
+        def request(self, *, method, path, identity_id=None):
+            return SimpleNamespace(
+                identity_id=identity_id, status_code=404,
+                body='{"id":"not-a-resource"}',
+                headers={"Content-Type": "application/json"},
+                body_sha256="b" * 64,
+            )
+
+    model = TargetModel("https://authorized.example")
+    result = discover(Adapter(), model, seeds=("/",), max_paths=1)
+    assert result.resource_ids == ()
+    assert model.resources == {}
+
+
+def test_resource_acquisition_rejects_html_spa_fallback_for_api_shaped_path():
+    from types import SimpleNamespace
+    from cydra_web2.discovery import discover
+
+    class Adapter:
+        def request(self, *, method, path, identity_id=None):
+            return SimpleNamespace(
+                identity_id=identity_id, status_code=200,
+                body='<html><body><div id="app">Not found</div></body></html>',
+                headers={"Content-Type": "text/html"},
+                body_sha256="c" * 64,
+            )
+
+    model = TargetModel("https://authorized.example")
+    result = discover(Adapter(), model, seeds=("/v1/not-real",), max_paths=1)
+    assert result.resource_ids == ()
+    assert model.resources == {}
+
+
+def test_resource_acquisition_accepts_successful_json_with_provenance():
+    from types import SimpleNamespace
+    from cydra_web2.discovery import discover
+
+    class Adapter:
+        def request(self, *, method, path, identity_id=None):
+            return SimpleNamespace(
+                identity_id=identity_id, status_code=200,
+                body='{"items":[{"uuid":"real-candidate"}]}',
+                headers={"Content-Type": "application/json; charset=utf-8"},
+                body_sha256="d" * 64,
+            )
+
+    model = TargetModel("https://authorized.example")
+    result = discover(Adapter(), model, seeds=("/v1/items",), max_paths=1)
+    assert result.resource_ids
+    resource = model.resources[result.resource_ids[0]]
+    assert resource.identifier == "real-candidate"
+    assert resource.source_observation == model.observations[0].id
+    assert resource.source_field_path == "items[0].uuid"
+    assert resource.owner_id is None
