@@ -1,6 +1,10 @@
 import json
 from pathlib import Path
 
+import pytest
+
+pytest.importorskip("reportlab", reason="PDF renderer tests require the optional report extra")
+
 from scripts.qa_report_pdf import _status, render_report
 
 
