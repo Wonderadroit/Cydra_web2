@@ -98,3 +98,4 @@ def test_bundle_origin_provenance_excludes_arbitrary_absolute_links():
     result = _analyze_bundle("/app.js", body, "https://app.authorized.example")
     assert result.service_origins == ("https://api.authorized.example",)
     assert result.request_origins == ()
+    assert ("GET", "/api") not in result.endpoints
