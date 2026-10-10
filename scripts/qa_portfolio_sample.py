@@ -33,7 +33,7 @@ def attach_diagnostics(page, obs):
 def bounded_diagnostics(page, test, prefix):
     diag = {"final_url": (page.url or "")[:500], "is_closed": page.is_closed()}
     try:
-        diag["document_state"] = page.locator("html").get_attribute("data-diagnostic-ready", timeout=1500)
+        diag["document_state"] = page.locator("html").evaluate("(el) => document.readyState", timeout=1500)
         diag["body_present"] = page.locator("body").count() > 0
         diag["body_text_excerpt"] = page.locator("body").inner_text(timeout=2000)[:1500]
     except Exception as exc:
