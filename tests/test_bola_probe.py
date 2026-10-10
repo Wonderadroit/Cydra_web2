@@ -108,3 +108,24 @@ def test_report_never_contains_response_body_or_resource_marker():
     assert MARKER not in serialized
     assert "owner-only" not in serialized
     assert "secret" not in serialized
+
+def test_report_redacts_query_values_from_path():
+    report, _ = probe("vulnerable", path="/records/42?access_token=do-not-publish")
+    serialized = json.dumps(report)
+    assert report["path"] == "/records/42"
+    assert report["query_parameters_present"] is True
+    assert "do-not-publish" not in serialized
+
+
+def test_probe_rejects_line_breaks_before_request():
+    adapter = FakeAdapter("vulnerable")
+    with pytest.raises(ValueError, match="line breaks"):
+        run_read_only_bola_probe(
+            adapter,
+            path="/records/42\r\nX-Injected: true",
+            resource_marker=MARKER,
+            owner_identity="owner",
+            comparison_identity="other",
+            owner_control_confirmed=True,
+        )
+    assert adapter.calls == []
