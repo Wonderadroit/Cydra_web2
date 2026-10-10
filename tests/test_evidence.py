@@ -60,3 +60,11 @@ def test_success_status_without_resource_marker_is_not_candidate():
     other = response(200, '{"id":"private-record-123"}')
     evidence = classify_differential(EXPERIMENT, owner, other)
     assert evidence.finding_candidate is False
+
+def test_marker_does_not_match_a_longer_identifier():
+    assert not response_contains_marker('{"record":{"id":"record-123"}}', "record-12")
+
+
+def test_non_json_marker_requires_token_boundaries():
+    assert not response_contains_marker("record-123", "record-12")
+    assert response_contains_marker("record record-12 found", "record-12")
