@@ -193,7 +193,9 @@ def _analyze_bundle(path, body, target):
         if value is None: unresolved.add(m.group(2).strip()); continue
         parsed=urlparse(urljoin(target,value)); request_origins.add((value,f'{parsed.scheme}://{parsed.netloc}'))
         if parsed.hostname==urlparse(target).hostname and re.match(r'^/(?:api|graphql|rpc|v[0-9]+)(?:/|$)',parsed.path,re.I): endpoints.add((method,parsed.path.split('?',1)[0]))
-    for value in _api_paths(body): endpoints.add(('GET',value)); request_origins.add((value,f'{urlparse(target).scheme}://{urlparse(target).netloc}'))
+    # Bare route-shaped strings are candidates, not proof of an HTTP call, method,
+    # or service origin. Keep them in _api_paths() for frontier scheduling, but
+    # only model endpoints here when a request call or XHR open() establishes them.
     for csp_match in _CSP.finditer(body):
         for token in csp_match.group(1).split():
             parsed=urlparse(token)
