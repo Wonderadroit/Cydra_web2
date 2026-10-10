@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-"""Discover a site's public registration surface without submitting forms.
+"""Discover public registration/authentication navigation without submitting forms.
 
-This deliberately does not create accounts, bypass CAPTCHA/verification, or submit
-credentials. It produces a sanitized map for deciding whether a target supports
-legitimate automated test-account provisioning.
+This is a read-only reconnaissance step: it never clicks controls, fills fields,
+submits forms, or attempts to bypass CAPTCHA/verification. It records rendered
+controls because modern SPA login pages often expose no ordinary HTML links.
 """
 import argparse
 import json
@@ -12,6 +12,9 @@ import re
 from pathlib import Path
 from urllib.parse import urlparse, urlunparse
 
+REGISTER_WORDS = re.compile(r"register|sign[ -]?up|create account|join now|new account|create user", re.I)
+AUTH_WORDS = re.compile(r"sign[ -]?in|log[ -]?in|auth|account|identity|continue with|google|discord|wallet", re.I)
+SENSITIVE = re.compile(r"password|secret|token|email|phone|otp|code|captcha", re.I)
 
 
 def _origin_key(url: str) -> tuple[str, str, int | None]:
@@ -32,21 +35,33 @@ def _safe_observed_url(url: str) -> str:
     return urlunparse((parsed.scheme, netloc, parsed.path, parsed.params, "", ""))
 
 
-REGISTER_WORDS = re.compile(r"register|sign[ -]?up|create account|join now|new account", re.I)
-SENSITIVE = re.compile(r"password|secret|token|email|phone|otp|code|captcha", re.I)
+def _safe_label(value: str) -> str:
+    value = re.sub(r"\s+", " ", value or "").strip()[:100]
+    if SENSITIVE.search(value):
+        return "[redacted-sensitive-label]"
+    return value
 
 
 def discover(base_url: str, output: Path) -> dict:
     parsed = urlparse(base_url)
     if parsed.scheme.lower() != "https" or not parsed.hostname or parsed.username or parsed.password:
         raise ValueError("target URL must be an absolute HTTPS URL without embedded credentials")
-    # Keep module import and non-browser guard tests usable in minimal CI jobs.
-    # The browser dependency is required only after the target passes validation.
     from playwright.sync_api import sync_playwright
 
     origin = f"https://{parsed.hostname.lower()}" + (f":{parsed.port}" if parsed.port else "")
     target_origin = _origin_key(base_url)
-    report = {"target_origin": origin, "visited": [], "registration_candidates": [], "forms": [], "blocked_external_links": []}
+    report = {
+        "target_origin": origin,
+        "visited": [],
+        "registration_candidates": [],
+        "forms": [],
+        "rendered_controls": [],
+        "blocked_external_links": [],
+        "limitations": [
+            "Read-only discovery does not click controls or submit forms.",
+            "A JavaScript-only button may require a separate operator-reviewed navigation step.",
+        ],
+    }
     queue = [base_url]
     seen: set[str] = set()
     with sync_playwright() as p:
@@ -64,16 +79,60 @@ def discover(base_url: str, output: Path) -> dict:
             seen.add(normalized)
             try:
                 response = page.goto(normalized, wait_until="domcontentloaded", timeout=20000)
-                page.wait_for_timeout(500)
-                # Do not inspect pages reached through a cross-origin redirect.
+                try:
+                    page.wait_for_load_state("networkidle", timeout=2500)
+                except Exception:
+                    pass
+                page.wait_for_timeout(1200)
                 if _origin_key(page.url) != target_origin:
                     report["blocked_external_links"].append(_safe_observed_url(page.url))
                     continue
+
                 title = page.title()
-                links = page.locator("a[href]").evaluate_all("""els => els.map(a => ({
-                    text: (a.innerText || a.getAttribute('aria-label') || '').trim().slice(0,100),
-                    href: a.href
-                }))""")
+                controls = page.locator(
+                    "a[href], button, input[type=button], input[type=submit], "
+                    "[role=button], [role=link], [data-testid]"
+                ).evaluate_all("""els => els.map(e => {
+                    const text = (e.innerText || e.getAttribute('aria-label') ||
+                                  e.getAttribute('title') || e.getAttribute('placeholder') ||
+                                  e.value || '').trim().slice(0, 100);
+                    return {
+                      tag: e.tagName.toLowerCase(),
+                      role: e.getAttribute('role') || '',
+                      text,
+                      href: e.href || e.getAttribute('href') || '',
+                      type: (e.type || '').toLowerCase(),
+                      test_id: e.getAttribute('data-testid') || ''
+                    };
+                })""")
+                safe_controls = []
+                for control in controls:
+                    label = _safe_label(control.get("text", ""))
+                    href = control.get("href", "")
+                    item = {
+                        "tag": control.get("tag", ""),
+                        "role": control.get("role", ""),
+                        "label": label,
+                        "type": control.get("type", ""),
+                    }
+                    if control.get("test_id"):
+                        item["test_id"] = _safe_label(control["test_id"])
+                    if href:
+                        safe_href = _safe_observed_url(href) if urlparse(href).scheme in {"http", "https"} else ""
+                        item["href"] = safe_href
+                        if _origin_key(href) != target_origin:
+                            report["blocked_external_links"].append(safe_href)
+                        elif REGISTER_WORDS.search(label + " " + href):
+                            report["registration_candidates"].append({"url": safe_href, "label": label or "registration link"})
+                            if href not in seen and href not in queue:
+                                queue.append(href)
+                    if label or href or item.get("test_id"):
+                        safe_controls.append(item)
+                report["rendered_controls"].append({
+                    "page": _safe_observed_url(normalized),
+                    "controls": safe_controls[:100],
+                })
+
                 forms = page.locator("form").evaluate_all("""forms => forms.map(f => ({
                     action: f.action || location.href,
                     method: (f.method || 'get').toUpperCase(),
@@ -86,37 +145,39 @@ def discover(base_url: str, output: Path) -> dict:
                         required: !!e.required
                     }))
                 }))""")
-                entry = {"url": _safe_observed_url(normalized), "status": response.status if response else None, "title": title}
-                report["visited"].append(entry)
-                for link in links:
-                    if REGISTER_WORDS.search(link["text"]):
-                        candidate = {"url": _safe_observed_url(link["href"]), "label": link["text"]}
-                        if _origin_key(link["href"]) == target_origin:
-                            report["registration_candidates"].append(candidate)
-                            if link["href"] not in seen and link["href"] not in queue:
-                                queue.append(link["href"])
-                        else:
-                            report["blocked_external_links"].append(_safe_observed_url(link["href"]))
+                report["visited"].append({
+                    "url": _safe_observed_url(normalized),
+                    "status": response.status if response else None,
+                    "title": title,
+                })
                 for form in forms:
-                    action_origin = _origin_key(form["action"])
-                    if action_origin != target_origin:
-                        report["blocked_external_links"].append(_safe_observed_url(form["action"]))
+                    action = form["action"]
+                    if _origin_key(action) != target_origin:
+                        report["blocked_external_links"].append(_safe_observed_url(action))
                         continue
-                    if REGISTER_WORDS.search(normalized + " " + title + " " + " ".join(f["label"] for f in form["fields"])):
+                    labels = " ".join(f["label"] for f in form["fields"])
+                    if REGISTER_WORDS.search(normalized + " " + title + " " + labels):
                         safe_fields = []
                         for field in form["fields"]:
                             item = dict(field)
-                            # Never record input values; sensitive labels are kept as field types only.
                             if SENSITIVE.search(item["name"] + " " + item["label"]):
                                 item["name"] = "[redacted-sensitive-field]"
                                 item["label"] = "[redacted-sensitive-field]"
                             safe_fields.append(item)
-                        report["forms"].append({"page": _safe_observed_url(normalized), "action": _safe_observed_url(form["action"]), "method": form["method"], "fields": safe_fields})
+                        report["forms"].append({
+                            "page": _safe_observed_url(normalized),
+                            "action": _safe_observed_url(action),
+                            "method": form["method"],
+                            "fields": safe_fields,
+                        })
             except Exception as exc:
                 report["visited"].append({"url": _safe_observed_url(normalized), "error": type(exc).__name__})
         browser.close()
-    report["registration_candidates"] = list({(x["url"], x["label"]): x for x in report["registration_candidates"]}.values())
-    report["blocked_external_links"] = sorted(set(report["blocked_external_links"]))
+
+    report["registration_candidates"] = list({
+        (x["url"], x["label"]): x for x in report["registration_candidates"]
+    }.values())
+    report["blocked_external_links"] = sorted(set(x for x in report["blocked_external_links"] if x))
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
     return report
@@ -128,8 +189,14 @@ def main() -> None:
     parser.add_argument("--output", default="artifacts/registration-discovery.json")
     args = parser.parse_args()
     report = discover(args.target_url, Path(args.output))
-    print(json.dumps({"visited_count": len(report["visited"]), "registration_candidates": report["registration_candidates"], "form_count": len(report["forms"]), "blocked_external_link_count": len(report["blocked_external_links"])}, indent=2))
-    print("No forms submitted; no account was created.")
+    print(json.dumps({
+        "visited_count": len(report["visited"]),
+        "registration_candidates": report["registration_candidates"],
+        "form_count": len(report["forms"]),
+        "rendered_control_count": sum(len(x["controls"]) for x in report["rendered_controls"]),
+        "blocked_external_link_count": len(report["blocked_external_links"]),
+    }, indent=2))
+    print("Read-only discovery: no controls clicked, no forms submitted, no account created.")
 
 
 if __name__ == "__main__":

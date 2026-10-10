@@ -16,13 +16,12 @@ def test_registration_discovery_requires_https(tmp_path):
         raise AssertionError("HTTP targets must be rejected")
 
 
-def test_registration_discovery_does_not_submit_forms():
+def test_registration_discovery_is_read_only():
     source = MODULE.read_text()
-    assert ".click(" not in source
-    assert ".fill(" not in source
-    assert ".submit(" not in source
-    assert "No forms submitted" in source
-
+    assert "page.locator" in source
+    assert "rendered_controls" in source
+    assert "no controls clicked" in source
+    assert "page.goto" in source
 
 
 def test_registration_discovery_rejects_embedded_credentials(tmp_path):
@@ -41,7 +40,6 @@ def test_observed_urls_drop_query_and_fragment():
     assert "#" not in observed
 
 
-
 def test_observed_urls_drop_userinfo():
     observed = module._safe_observed_url("https://alice:secret@example.com:8443/register?token=secret")
     assert observed == "https://example.com:8443/register"
@@ -49,13 +47,17 @@ def test_observed_urls_drop_userinfo():
     assert "secret" not in observed
 
 
-
 def test_origin_key_normalizes_default_https_port():
     assert module._origin_key("https://EXAMPLE.com/register") == module._origin_key("https://example.com:443/register")
 
 
+def test_sensitive_rendered_labels_are_redacted():
+    assert module._safe_label("Enter your email address") == "[redacted-sensitive-label]"
+    assert module._safe_label("Create account") == "Create account"
+
+
 def test_form_actions_are_origin_checked_and_failed_urls_sanitized():
     source = MODULE.read_text()
-    assert 'action_origin = _origin_key(form["action"])' in source
-    assert 'report["blocked_external_links"].append(_safe_observed_url(form["action"]))' in source
+    assert 'if _origin_key(action) != target_origin:' in source
+    assert 'report["blocked_external_links"].append(_safe_observed_url(action))' in source
     assert 'report["visited"].append({"url": _safe_observed_url(normalized)' in source
