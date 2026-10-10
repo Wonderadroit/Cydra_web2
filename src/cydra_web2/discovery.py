@@ -25,10 +25,18 @@ class DiscoveryResult:
     bundle_analyses: tuple[BundleAnalysis, ...] = ()
 
 class _Links(HTMLParser):
-    def __init__(self): super().__init__(); self.links = set()
+    def __init__(self):
+        super().__init__()
+        self.links = set()
+        self.script_sources = set()
+
     def handle_starttag(self, tag, attrs):
+        values = dict(attrs)
         for k, v in attrs:
-            if v and k.lower() in {'href','src','action'}: self.links.add(v)
+            if v and k.lower() in {'href', 'src', 'action'}:
+                self.links.add(v)
+        if tag.lower() == "script" and values.get("src"):
+            self.script_sources.add(values["src"])
 
 _ID = re.compile(r'^(?:id|uuid|[A-Za-z][A-Za-z0-9]*(?:_id|_uuid|Id|UUID))$', re.I)
 _PATH = re.compile(r'/(?:api|graphql|rpc|v[0-9]+)(?:/[A-Za-z0-9_.$:@%~+\-{}]+)*')
@@ -218,15 +226,29 @@ def discover(adapter: HttpAdapter, model: TargetModel, seeds: Iterable[str]=('/'
         ctype=str(getattr(response,'headers',{}).get('Content-Type','')).lower(); is_js='javascript' in ctype or path.lower().endswith(('.js','.mjs'))
         if is_js and path not in analyzed and len(analyzed)<max_js_bundles: analyses.append(_analyze_bundle(path,response.body,model.target)); analyzed.add(path)
         api_candidates = set(_api_paths(response.body))
-        parser = _Links(); parser.feed(response.body)
+        parser = _Links()
+        parser.feed(response.body)
         static_candidates = {x for x in parser.links if x.startswith('/')}
+        script_candidates = {x for x in parser.script_sources if x.startswith('/')}
         if is_js:
-            api_candidates.update(x for _, x in analyses[-1].endpoints if x.startswith('/') and '{' not in x)
-        # API routes are the security-research frontier; static assets remain fallback discovery.
-        api_candidates = {x for x in api_candidates if x.startswith('/') and '{' not in x}
-        for candidate in sorted(api_candidates, reverse=True):
+            api_candidates.update(
+                x for _, x in analyses[-1].endpoints
+                if x.startswith('/') and '{' not in x
+            )
+        # Bootstrap application JavaScript before recursively expanding route-shaped
+        # strings. Otherwise a noisy API frontier can consume the path budget before
+        # the bundles that reveal real request methods and service configuration run.
+        # Script paths are still same-origin relative candidates; HttpAdapter enforces
+        # the configured target scope for every request.
+        api_candidates = {
+            x for x in api_candidates if x.startswith('/') and '{' not in x
+        }
+        for candidate in sorted(script_candidates, reverse=True):
             if candidate not in seen and candidate not in queue:
                 queue.insert(0, candidate)
+        for candidate in sorted(api_candidates, reverse=True):
+            if candidate not in seen and candidate not in queue:
+                queue.append(candidate)
         for candidate in sorted(static_candidates):
             if candidate not in seen and candidate not in queue:
                 queue.append(candidate)
