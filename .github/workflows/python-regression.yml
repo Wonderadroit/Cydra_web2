@@ -19,7 +19,7 @@ jobs:
           python-version: "3.12"
           cache: pip
       - name: Install test dependencies
-        run: python -m pip install -e ".[test]"
+        run: python -m pip install -e ".[test,report]"
       - name: Run regression tests
         env:
           PYTHONPATH: .
