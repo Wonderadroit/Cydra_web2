@@ -13,7 +13,7 @@ OUT = Path(os.environ.get("CYDRA_QA_BENCHMARK_OUT", "artifacts/qa-mutation-bench
 CASES = {
     "checkbox_toggle": {
         "good": """<!doctype html><html><body><input id="flag" type="checkbox"></body></html>""",
-        "mutant": """<!doctype html><html><body><input id="flag" type="checkbox" disabled></body></html>""",
+        "mutant": """<!doctype html><html><body><input id="flag" type="checkbox" onclick="event.preventDefault()"></body></html>""",
         "description": "Checkbox must change state when activated.",
     },
     "add_element": {
@@ -81,7 +81,7 @@ def run_variant(playwright, case_name: str, variant: str, html: str) -> dict:
         result["benchmark_pass"] = result["observed"] == "PASS"
     else:
         # A seeded defect is detected only when the same contract fails on the mutant.
-        result["benchmark_pass"] = result["observed"] == "FAIL"
+        result["benchmark_pass"] = result["observed"] == "FAIL" and result.get("assertion", "").startswith("AssertionError:")
     return result
 
 
