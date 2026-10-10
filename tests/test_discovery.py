@@ -178,3 +178,39 @@ def test_bare_route_strings_are_candidates_not_confirmed_calls_or_origins():
     assert _api_paths(body) == {"/v1/items"}
     assert analysis.endpoints == ()
     assert analysis.request_origins == ()
+
+
+def test_discovery_prioritizes_script_bundles_before_route_string_noise():
+    from types import SimpleNamespace
+    from cydra_web2.discovery import discover
+    from cydra_web2.model import TargetModel
+
+    calls = []
+
+    class Adapter:
+        def request(self, *, method, path, identity_id=None):
+            calls.append(path)
+            if path == "/":
+                body = (
+                    '<script src="/assets/app.js"></script>'
+                    '<a href="/v1/ownerships/wallet-challenges">API</a>'
+                )
+                ctype = "text/html"
+            elif path == "/assets/app.js":
+                body = 'fetch("/v1/profile"); axios.post("/v1/session");'
+                ctype = "application/javascript"
+            else:
+                body = '{"message":"not found"}'
+                ctype = "application/json"
+            return SimpleNamespace(
+                identity_id=identity_id, status_code=200, body=body,
+                body_sha256="a" * 64, headers={"Content-Type": ctype},
+            )
+
+    model = TargetModel("https://authorized.example")
+    result = discover(Adapter(), model, seeds=("/",), max_paths=3, max_js_bundles=2)
+
+    assert calls[:2] == ["/", "/assets/app.js"]
+    modeled = {(endpoint.method, endpoint.path) for endpoint in model.endpoints.values()}
+    assert ("GET", "/v1/profile") in modeled
+    assert ("POST", "/v1/session") in modeled
