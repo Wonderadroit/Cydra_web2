@@ -117,16 +117,10 @@ def main() -> int:
         # Reuse one Chromium process across viewport contexts. CI evidence shows
         # desktop checks pass, then a second Chromium launch can produce a frozen
         # renderer for every mobile check. Fresh contexts still isolate viewport state.
-        browser = p.chromium.launch(
-            headless=True,
-            args=[
-                "--disable-gpu",
-                "--disable-dev-shm-usage",
-                "--disable-renderer-backgrounding",
-                "--disable-backgrounding-occluded-windows",
-                "--disable-features=PaintHolding,BackForwardCache",
-            ],
-        )
+        # Use Playwright's supported Chromium defaults. The previous custom
+        # renderer/backgrounding flags were experimental and did not prevent
+        # renderer hangs; remove them to restore the standard CI browser path.
+        browser = p.chromium.launch(headless=True)
         browser_version = browser.version
         for device, viewport in VIEWPORTS.items():
             context = browser.new_context(
@@ -136,12 +130,9 @@ def main() -> int:
                 has_touch=False,
                 ignore_https_errors=False,
             )
-            # A/B comparison: runs without this legacy third-party analytics script
-            # had renderer stalls on all four checks; retain this narrow script route
-            # alongside the known telemetry endpoint route. Application assets and
-            # tested page requests remain unmodified.
-            context.route("https://the-internet.herokuapp.com/js/vendor/298279967.js", lambda route: route.fulfill(status=200, content_type="application/javascript", body=""))
-            context.route("https://298279967.log.optimizely.com/**", lambda route: route.abort())
+            # Do not intercept page resources during the baseline reproduction.
+            # Earlier analytics-route experiments did not resolve the renderer hang
+            # and could obscure whether the failure is in Chromium or the target page.
             page = context.new_page()
             page.set_default_timeout(15000)
             console_errors: list[str] = []
