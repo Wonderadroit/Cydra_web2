@@ -46,7 +46,7 @@ def bounded_diagnostics(page, test, prefix):
         diag["screenshot_error"] = f"{type(exc).__name__}: {str(exc)[:300]}"
     test["diagnostics"] = diag
 
-def run_test(playwright, device, viewport, kind):
+def _run_test_once(playwright, device, viewport, kind):
     url = f"{TARGET}/checkboxes" if kind == "checkboxes" else f"{TARGET}/add_remove_elements/"
     test = {"id": f"{'QA-001' if kind == 'checkboxes' else 'QA-002'}-{device}",
             "name": "Checkboxes toggle and restore state" if kind == "checkboxes" else "Add/remove element control updates the page",
@@ -126,6 +126,30 @@ def run_test(playwright, device, viewport, kind):
                 except Exception:
                     pass
     return test
+
+def run_test(playwright, device, viewport, kind):
+    # A 200 response can arrive before a stalled upstream body produces any DOM.
+    # Retry only navigation/readiness failures, with a wholly new Chromium process.
+    attempts = []
+    for attempt in range(1, 3):
+        result = _run_test_once(playwright, device, viewport, kind)
+        attempts.append({"attempt": attempt, "status": result["status"],
+                         "http_status": result.get("http_status"),
+                         "note": result.get("notes", [""])[0] if result.get("notes") else ""})
+        if result["status"] == "PASS":
+            if attempt > 1:
+                result["notes"].append(f"Recovered after {attempt - 1} bounded fresh-browser readiness retry.")
+            result["recovery_attempts"] = attempts
+            return result
+        first_note = attempts[-1]["note"]
+        readiness_failure = (result.get("http_status") is None or
+                             "waiting for locator(\"body\")" in first_note or
+                             "waiting until \"commit\"" in first_note or
+                             "waiting for locator(\"input[type=\\"checkbox\\"]" in first_note)
+        if not readiness_failure or attempt == 2:
+            result["recovery_attempts"] = attempts
+            return result
+    return result
 
 def main():
     parsed = urlparse(TARGET)
