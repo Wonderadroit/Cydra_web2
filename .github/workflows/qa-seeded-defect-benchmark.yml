@@ -20,11 +20,17 @@ jobs:
       - name: Install browser test dependency
         timeout-minutes: 5
         run: |
-          python -m pip install -e ".[browser]"
+          python -m pip install -e ".[browser,report]"
           python -m playwright install chromium
       - name: Verify known-good controls and seeded defects
         timeout-minutes: 5
         run: python scripts/qa_mutation_benchmark.py
+      - name: Render PDF evidence report
+        if: always()
+        run: |
+          if [ -f artifacts/qa-mutation-benchmark/report.json ]; then
+            python scripts/qa_report_pdf.py --input artifacts/qa-mutation-benchmark/report.json --output artifacts/qa-mutation-benchmark/report.pdf
+          fi
       - name: Upload benchmark report and screenshots
         if: always()
         uses: actions/upload-artifact@v4
