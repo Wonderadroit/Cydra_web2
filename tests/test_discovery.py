@@ -127,6 +127,6 @@ def test_discovery_retains_source_field_path_without_claiming_ownership():
     result = discover(Adapter(), model, seeds=("/",), max_paths=1)
     resource = model.resources[result.resource_ids[0]]
     assert resource.identifier == "public-item-9"
-    assert resource.source_field_path == "props.items[0].uuid"
+    assert resource.source_field_path == "[0].props.items[0].uuid"
     assert resource.source_observation == model.observations[0].id
     assert resource.owner_id is None
