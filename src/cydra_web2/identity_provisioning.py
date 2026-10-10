@@ -26,7 +26,7 @@ def classify_auth_options(items: list[dict], target_url: str) -> dict:
     methods = set()
     observations = []
     for item in items:
-        label = re.sub(r"\\s+", " ", str(item.get("label", "")).strip().lower())
+        label = re.sub(r"\s+", " ", str(item.get("label", "")).strip().lower())
         placeholder = str(item.get("placeholder", "")).strip().lower()
         control_type = str(item.get("type", "")).strip().lower()
         name = str(item.get("name", "")).strip().lower()
