@@ -11,6 +11,7 @@ class Resource:
     owner_id:str|None
     identifier:str|None
     source_observation:str|None=None
+    source_field_path:str|None=None
 @dataclass(frozen=True)
 class Endpoint:
     id:str

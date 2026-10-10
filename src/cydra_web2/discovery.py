@@ -50,15 +50,48 @@ def _api_paths(body: str):
     return out
 
 def _documents(body: str):
-    docs=[]
-    try: docs.append(json.loads(body))
-    except (TypeError,json.JSONDecodeError): pass
-    for attrs, source in re.findall(r'<script\b([^>]*)>(.*?)</script\s*>', body, re.I|re.S):
-        if re.search(r'type\s*=\s*["\']application/json["\']', attrs, re.I):
-            try: docs.append(json.loads(source))
-            except (TypeError,json.JSONDecodeError): pass
-    return docs
+    """Extract structured documents from JSON responses and known hydration containers.
 
+    Framework stream text is candidate data, never proof of resource ownership.
+    """
+    docs=[]
+    try:
+        docs.append(json.loads(body))
+    except (TypeError,json.JSONDecodeError):
+        pass
+
+    scripts = re.findall(r'<script\b([^>]*)>(.*?)</script\s*>', body, re.I|re.S)
+    for attrs, source in scripts:
+        if re.search(r'type\s*=\s*["\']application/json["\']', attrs, re.I):
+            try:
+                docs.append(json.loads(source))
+            except (TypeError,json.JSONDecodeError):
+                pass
+        # Next.js App Router streams serialized RSC chunks in calls such as
+        # self.__next_f.push([1,"1:{\"props\":{...}}"]). Decode only the JSON
+        # argument, then parse chunks that are themselves JSON documents.
+        if "self.__next_f.push" not in source:
+            continue
+        for match in re.finditer(r'self\.__next_f\.push\(\s*(\[[^\n]*?\])\s*\)', source):
+            try:
+                payload = json.loads(match.group(1))
+            except (TypeError,json.JSONDecodeError):
+                continue
+            if not isinstance(payload, list):
+                continue
+            for chunk in payload:
+                if not isinstance(chunk, str):
+                    continue
+                _, sep, candidate = chunk.partition(":")
+                if not sep:
+                    continue
+                try:
+                    value = json.loads(candidate)
+                except (TypeError,json.JSONDecodeError):
+                    continue
+                if isinstance(value, (dict,list)):
+                    docs.append(value)
+    return docs
 def _ids(value, path=''):
     if isinstance(value,dict):
         for k,v in value.items():
@@ -136,7 +169,7 @@ def discover(adapter: HttpAdapter, model: TargetModel, seeds: Iterable[str]=('/'
                 queue.append(candidate)
         for key,identifier,field_path in _ids(_documents(response.body)):
             rid='resource:'+hashlib.sha256((key+'|'+identifier).encode()).hexdigest()[:16]
-            if rid not in model.resources: model.add_resource(Resource(rid,key,None,identifier,obs.id)); resource_ids.append(rid)
+            if rid not in model.resources: model.add_resource(Resource(rid,key,None,identifier,obs.id,field_path)); resource_ids.append(rid)
             endpoint=model.endpoints[endpoint_id]
             if rid not in endpoint.resource_ids: model.endpoints[endpoint_id]=Endpoint(endpoint.id,endpoint.method,endpoint.path,tuple(sorted(set(endpoint.resource_ids)|{rid})),endpoint.action)
     for analysis in analyses:

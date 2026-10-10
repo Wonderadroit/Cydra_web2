@@ -99,3 +99,34 @@ def test_bundle_origin_provenance_excludes_arbitrary_absolute_links():
     assert result.service_origins == ("https://api.authorized.example",)
     assert result.request_origins == ()
     assert ("GET", "/api") not in result.endpoints
+
+
+def test_nextjs_rsc_hydration_extracts_candidates_with_field_path_provenance():
+    from cydra_web2.discovery import _documents, _ids
+
+    body = r'''<html><script>self.__next_f.push([1,"1:{\"props\":{\"pageProps\":{\"items\":[{\"id\":\"item-42\"}]}}}"]);</script></html>'''
+    docs = _documents(body)
+    values = list(item for doc in docs for item in _ids(doc))
+    assert ("id", "item-42", "props.pageProps.items[0].id") in values
+
+
+def test_discovery_retains_source_field_path_without_claiming_ownership():
+    from types import SimpleNamespace
+    from cydra_web2.discovery import discover
+    from cydra_web2.model import TargetModel
+
+    class Adapter:
+        def request(self, *, method, path, identity_id=None):
+            return SimpleNamespace(
+                identity_id=identity_id, status_code=200,
+                body=r'''<script>self.__next_f.push([1,"1:{\"props\":{\"items\":[{\"uuid\":\"public-item-9\"}]}}"]);</script>''',
+                headers={"Content-Type": "text/html"},
+            )
+
+    model = TargetModel("https://authorized.example")
+    result = discover(Adapter(), model, seeds=("/",), max_paths=1)
+    resource = model.resources[result.resource_ids[0]]
+    assert resource.identifier == "public-item-9"
+    assert resource.source_field_path == "[0].props.items[0].uuid"
+    assert resource.source_observation == model.observations[0].id
+    assert resource.owner_id is None
