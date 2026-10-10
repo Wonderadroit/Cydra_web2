@@ -30,4 +30,4 @@ def test_label_whitespace_is_normalized_before_classification():
 def test_visible_text_normalization_collapses_real_whitespace():
     from cydra_web2.identity_provisioning import normalize_visible_text
 
-    assert normalize_visible_text("  Inventory\\n   Items\\t  2  ") == "inventory items 2"
+    assert normalize_visible_text("  Inventory\n   Items\t  2  ") == "inventory items 2"
