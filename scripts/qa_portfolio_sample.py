@@ -52,25 +52,40 @@ def navigate_with_retries(page, url: str, attempts: int = 3):
     return None
 
 
-def wait_for_visible_with_one_reload(page, locator, url: str, test: dict, control_name: str) -> None:
-    """Allow one transparent recovery for transient page-readiness stalls; assertions remain strict."""
+def wait_for_visible_with_one_reload(page, locator, url: str, test: dict):
+    """Recover from a stalled renderer with bounded reload and fresh-page retry."""
     try:
         locator.wait_for(state="visible", timeout=8000)
-        return
+        return page
     except PlaywrightTimeoutError as first_error:
         test["notes"].append(
-            f"Readiness retry: {control_name} was not visible on the first attempt; reloaded the same URL once."
+            f"Readiness retry: {locator.selector} was not visible on the first attempt; reloaded the same URL once."
         )
-        # A reload is a new observation of the same approved target and does not alter
-        # expected state or replace the tested application code.
-        page.goto(url, wait_until="commit", timeout=20000)
         try:
-            locator.wait_for(state="visible", timeout=8000)
-        except PlaywrightTimeoutError as second_error:
-            raise AssertionError(
-                f"{control_name} remained unavailable after one bounded reload. "
-                f"Initial timeout: {first_error}; retry timeout: {second_error}"
-            ) from second_error
+            page.goto(url, wait_until="commit", timeout=20000)
+            page.locator(locator.selector).wait_for(state="visible", timeout=8000)
+            return page
+        except Exception as second_error:
+            # A renderer can remain wedged after navigation returns a response. A fresh
+            # page gives the same viewport and target URL a new renderer/page lifecycle.
+            test["notes"].append(
+                f"Fresh-page recovery: same-page retry failed ({type(second_error).__name__}); opening a new page."
+            )
+            try:
+                page.close()
+            except Exception:
+                pass
+            fresh_page = page.context.new_page()
+            fresh_page.set_default_timeout(15000)
+            fresh_page.goto(url, wait_until="commit", timeout=20000)
+            try:
+                fresh_page.locator(locator.selector).wait_for(state="visible", timeout=8000)
+            except PlaywrightTimeoutError as third_error:
+                raise AssertionError(
+                    f"Control remained unavailable after bounded reload and fresh-page retry. "
+                    f"Initial timeout: {first_error}; reload retry: {second_error}; fresh-page retry: {third_error}"
+                ) from third_error
+            return fresh_page
 
 
 def main() -> int:
@@ -140,7 +155,7 @@ def main() -> int:
                 test1["http_status"] = response.status if response else None
                 # Record status and observed browser behavior without reading an unbounded
                 # streaming response body; a stalled body must not hang the entire QA run.
-                wait_for_visible_with_one_reload(page, page.locator("input[type=checkbox]").first, checkbox_url, test1, "first checkbox")
+                page = wait_for_visible_with_one_reload(page, page.locator("input[type=checkbox]").first, checkbox_url, test1)
                 checks = page.locator("input[type=checkbox]")
                 count = checks.count()
                 if count != 2:
@@ -226,7 +241,7 @@ def main() -> int:
                 # Record status and observed browser behavior without reading an unbounded
                 # streaming response body; a stalled body must not hang the entire QA run.
                 add_button = page.get_by_role("button", name="Add Element")
-                wait_for_visible_with_one_reload(page, add_button, add_url, test2, "Add Element button")
+                page = wait_for_visible_with_one_reload(page, add_button, add_url, test2)
                 before = page.get_by_role("button", name="Delete").count()
                 shot = evidence_dir / f"{device}-add-remove-initial.png"
                 page.screenshot(path=str(shot), full_page=True)
