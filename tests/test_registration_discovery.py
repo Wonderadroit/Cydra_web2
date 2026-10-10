@@ -22,3 +22,20 @@ def test_registration_discovery_does_not_submit_forms():
     assert ".fill(" not in source
     assert ".submit(" not in source
     assert "No forms submitted" in source
+
+
+
+def test_registration_discovery_rejects_embedded_credentials(tmp_path):
+    try:
+        module.discover("https://user:secret@example.com", tmp_path / "report.json")
+    except ValueError as exc:
+        assert "credentials" in str(exc)
+    else:
+        raise AssertionError("URLs with embedded credentials must be rejected")
+
+
+def test_observed_urls_drop_query_and_fragment():
+    observed = module._safe_observed_url("https://example.com/register?token=secret&next=%2Fhome#form")
+    assert observed == "https://example.com/register"
+    assert "secret" not in observed
+    assert "#" not in observed
