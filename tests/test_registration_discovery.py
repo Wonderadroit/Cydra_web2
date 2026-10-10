@@ -39,3 +39,11 @@ def test_observed_urls_drop_query_and_fragment():
     assert observed == "https://example.com/register"
     assert "secret" not in observed
     assert "#" not in observed
+
+
+
+def test_observed_urls_drop_userinfo():
+    observed = module._safe_observed_url("https://alice:secret@example.com:8443/register?token=secret")
+    assert observed == "https://example.com:8443/register"
+    assert "alice" not in observed
+    assert "secret" not in observed
