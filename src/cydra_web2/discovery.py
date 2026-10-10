@@ -211,6 +211,35 @@ def _analyze_bundle(path, body, target):
                 origins.add(f'{parsed.scheme}://{parsed.netloc}')
     return BundleAnalysis(path,tuple(sorted(methods)),tuple(sorted(endpoints)),tuple(sorted(request_origins)),tuple(sorted(origins)),tuple(sorted(unresolved)))
 
+def _resource_documents(response):
+    """Parse resource-bearing documents only from successful, data-shaped responses.
+
+    A route returning HTTP 200 is not sufficient: SPA fallback HTML and error
+    bodies frequently return 200/404 for arbitrary API-shaped paths. JSON is
+    accepted when the media type says JSON or the body is visibly a JSON
+    object/array (for simple adapters that omit headers). HTML is accepted only
+    when it contains a known Next.js Flight hydration container.
+    """
+    status = int(getattr(response, "status_code", 0) or 0)
+    if not 200 <= status < 300:
+        return []
+    body = str(getattr(response, "body", "") or "")
+    headers = getattr(response, "headers", {}) or {}
+    content_type = ""
+    for key, value in headers.items():
+        if str(key).lower() == "content-type":
+            content_type = str(value).split(";", 1)[0].strip().lower()
+            break
+    stripped = body.lstrip()
+    is_json_type = content_type == "application/json" or content_type.endswith("+json")
+    is_json_shape = stripped.startswith("{") or stripped.startswith("[")
+    if is_json_type or (not content_type and is_json_shape):
+        return _documents(body)
+    if content_type in {"text/html", "application/xhtml+xml"} and "self.__next_f.push" in body:
+        return _documents(body)
+    return []
+
+
 def discover(adapter: HttpAdapter, model: TargetModel, seeds: Iterable[str]=('/',), max_paths: int=50, identity_id: str|None=None, max_js_bundles: int=50)->DiscoveryResult:
     queue=list(dict.fromkeys(seeds)); seen=set(); observations=[]; resource_ids=[]; analyses=[]; analyzed=set()
     while queue and len(seen)<max_paths:
@@ -252,7 +281,7 @@ def discover(adapter: HttpAdapter, model: TargetModel, seeds: Iterable[str]=('/'
         for candidate in sorted(static_candidates):
             if candidate not in seen and candidate not in queue:
                 queue.append(candidate)
-        for key,identifier,field_path in _ids(_documents(response.body)):
+        for key,identifier,field_path in _ids(_resource_documents(response)):
             rid='resource:'+hashlib.sha256((key+'|'+identifier).encode()).hexdigest()[:16]
             if rid not in model.resources: model.add_resource(Resource(rid,key,None,identifier,obs.id,field_path)); resource_ids.append(rid)
             endpoint=model.endpoints[endpoint_id]
