@@ -21,9 +21,15 @@ def _origin_key(url: str) -> tuple[str, str, int | None]:
 
 
 def _safe_observed_url(url: str) -> str:
-    """Remove query strings and fragments before writing observed URLs to artifacts."""
+    """Remove userinfo, query strings, and fragments from persisted observed URLs."""
     parsed = urlparse(url)
-    return urlunparse((parsed.scheme, parsed.netloc, parsed.path, parsed.params, "", ""))
+    host = parsed.hostname or ""
+    try:
+        port = parsed.port
+    except ValueError:
+        port = None
+    netloc = f"{host}:{port}" if port is not None else host
+    return urlunparse((parsed.scheme, netloc, parsed.path, parsed.params, "", ""))
 
 
 REGISTER_WORDS = re.compile(r"register|sign[ -]?up|create account|join now|new account", re.I)
