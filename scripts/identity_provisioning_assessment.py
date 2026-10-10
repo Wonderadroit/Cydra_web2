@@ -27,12 +27,15 @@ def main() -> None:
         page = browser.new_page()
         page.goto(auth_url, wait_until="domcontentloaded", timeout=45000)
         page.wait_for_timeout(1500)
-        items = page.locator("a,button,[role=button],input[type=submit]").evaluate_all(
+        items = page.locator("a,button,[role=button],input,form").evaluate_all(
             """els => els.map(el => ({
                 label: (el.innerText || el.getAttribute('aria-label') ||
                         el.getAttribute('title') || el.value || '').trim().slice(0, 120),
-                href: el.getAttribute('href') || ''
-            })).filter(x => x.label || x.href).slice(0, 150)"""
+                href: el.getAttribute('href') || '',
+                type: (el.getAttribute('type') || '').slice(0, 40),
+                name: (el.getAttribute('name') || '').slice(0, 80),
+                placeholder: (el.getAttribute('placeholder') || '').slice(0, 120)
+            })).filter(x => x.label || x.href || x.type || x.name || x.placeholder).slice(0, 200)"""
         )
         title = page.title()[:200]
         browser.close()
