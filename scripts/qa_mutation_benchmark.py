@@ -9,6 +9,9 @@ from pathlib import Path
 
 from playwright.sync_api import sync_playwright
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+from cydra_web2.qa_generation import generate_test_candidates
+
 OUT = Path(os.environ.get("CYDRA_QA_BENCHMARK_OUT", "artifacts/qa-mutation-benchmark"))
 CASES = {
     "checkbox_toggle": {
@@ -34,7 +37,29 @@ CASES = {
 }
 
 
-def assert_contract(page, case_name: str) -> None:
+def assert_contract(page, case_name: str) -> list[dict]:
+    snapshot = page.evaluate("""() => ({
+      checkbox_count: document.querySelectorAll('input[type="checkbox"]').length,
+      form_controls: Array.from(document.querySelectorAll('input, select, textarea'))
+        .map((el) => {
+          const label = el.labels ? Array.from(el.labels).map((item) => item.innerText).join(" ").trim() : "";
+          return {
+            label,
+            type: el.type || el.tagName.toLowerCase(),
+            required: Boolean(el.required),
+            required_hint: /\\*|\\brequired\\b/i.test(label)
+          };
+        })
+    })""")
+    candidates = generate_test_candidates(snapshot)
+    candidate_ids = {candidate["id"] for candidate in candidates}
+    if case_name == "checkbox_toggle":
+        assert "checkbox_toggle_restore" in candidate_ids, "candidate generator missed observed checkbox"
+    elif case_name == "required_validation":
+        assert any(item.startswith("required_validation_") for item in candidate_ids), (
+            "candidate generator missed required intent signaled by the field label"
+        )
+
     if case_name == "checkbox_toggle":
         control = page.locator("#flag")
         before = control.is_checked()
@@ -54,6 +79,7 @@ def assert_contract(page, case_name: str) -> None:
         assert valid is False, "empty required email form unexpectedly passed validation"
     else:
         raise ValueError(f"unknown case: {case_name}")
+    return candidates
 
 
 def run_variant(playwright, case_name: str, variant: str, html: str) -> dict:
@@ -63,8 +89,13 @@ def run_variant(playwright, case_name: str, variant: str, html: str) -> dict:
     try:
         page = browser.new_page(viewport={"width": 1280, "height": 800})
         page.set_content(html, wait_until="domcontentloaded", timeout=3000)
-        assert_contract(page, case_name)
-        result.update({"observed": "PASS", "assertion": "contract satisfied"})
+        candidates = assert_contract(page, case_name)
+        result.update({
+            "observed": "PASS",
+            "assertion": "contract satisfied",
+            "generated_candidates": candidates,
+            "generated_candidate_count": len(candidates),
+        })
     except Exception as exc:
         result.update({"observed": "FAIL", "assertion": f"{type(exc).__name__}: {str(exc)[:500]}"})
     finally:
@@ -100,14 +131,14 @@ def main() -> int:
         "started_at_utc": started,
         "ended_at_utc": datetime.now(timezone.utc).isoformat(),
         "environment": {"platform": platform.platform(), "python": sys.version.split()[0], "browser": "Chromium"},
-        "method": "For each contract, the same executable assertion is run against a known-good fixture and a deliberately defective mutant. Good fixtures must pass; mutants must fail the assertion.",
+        "method": "For each contract, the same executable assertion is run against a known-good fixture and a deliberately defective mutant. DOM-derived heuristic candidates are generated from observed controls and label intent for checkbox and required-field checks; good fixtures must pass and mutants must fail the assertion.",
         "summary": {"total_variants": len(results), "passed_expectations": passed, "failed_expectations": failed,
                     "good_fixtures": len(CASES), "seeded_mutants": len(CASES),
                     "mutants_detected": sum(item["variant"] == "mutant" and item["observed"] == "FAIL" for item in results)},
         "cases": [{"name": name, "description": case["description"]} for name, case in CASES.items()],
         "results": results,
         "limitations": [
-            "This is a controlled benchmark of the browser assertion harness, not proof of autonomous AI-generated test discovery.",
+            "Candidate generation is a deterministic DOM heuristic baseline, not an LLM and not proof of autonomous AI-generated test discovery.",
             "Mutants are deliberately seeded and known in advance; results must not be described as real customer defects.",
             "A passing benchmark validates these four contracts only."
         ]
