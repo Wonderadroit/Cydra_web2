@@ -55,7 +55,7 @@ def run_test(playwright, device, viewport, kind):
     browser = context = page = None
     try:
         # A fresh browser process for every functional test, not just a new page/context.
-        browser = playwright.chromium.launch(headless=True)
+        browser = playwright.chromium.launch(headless=True, args=["--disable-gpu", "--disable-dev-shm-usage"])
         test["browser_version"] = browser.version
         context = browser.new_context(viewport=viewport, device_scale_factor=1, is_mobile=False, has_touch=False, ignore_https_errors=False)
         def route_request(route):
