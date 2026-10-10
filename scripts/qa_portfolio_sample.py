@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import base64
-import html
 import json
 import os
 import platform
@@ -9,531 +7,162 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlparse
-
-from playwright.sync_api import TimeoutError as PlaywrightTimeoutError, sync_playwright
+from playwright.sync_api import sync_playwright
 
 TARGET = "https://the-internet.herokuapp.com"
 OUT = Path(os.environ.get("CYDRA_QA_OUT", "artifacts/qa-portfolio"))
-ALL_VIEWPORTS = {
-    "desktop": {"width": 1365, "height": 900},
-    "mobile": {"width": 390, "height": 844},
-}
-# Each viewport runs in its own GitHub-hosted job to isolate Chromium renderer
-# state. "all" remains available for a local combined run.
-_requested_viewport = os.environ.get("CYDRA_QA_VIEWPORT", "all").strip().lower()
-if _requested_viewport not in {"all", *ALL_VIEWPORTS}:
+ALL_VIEWPORTS = {"desktop": {"width": 1365, "height": 900}, "mobile": {"width": 390, "height": 844}}
+requested = os.environ.get("CYDRA_QA_VIEWPORT", "all").strip().lower()
+if requested not in {"all", *ALL_VIEWPORTS}:
     raise ValueError("CYDRA_QA_VIEWPORT must be 'all', 'desktop', or 'mobile'.")
-VIEWPORTS = (
-    ALL_VIEWPORTS if _requested_viewport == "all"
-    else {_requested_viewport: ALL_VIEWPORTS[_requested_viewport]}
-)
+VIEWPORTS = ALL_VIEWPORTS if requested == "all" else {requested: ALL_VIEWPORTS[requested]}
+TELEMETRY_SUFFIXES = ("optimizely.com",)
 
-
-def utc_now() -> str:
+def utc_now():
     return datetime.now(timezone.utc).isoformat()
 
-
-def write_json(path: Path, value: object) -> None:
+def write_json(path, value):
     path.write_text(json.dumps(value, indent=2, sort_keys=True), encoding="utf-8")
 
+def attach_diagnostics(page, obs):
+    page.on("console", lambda msg: obs["console_errors"].append(msg.text[:500]) if msg.type == "error" and len(obs["console_errors"]) < 30 else None)
+    page.on("pageerror", lambda error: obs["page_errors"].append(str(error)[:500]) if len(obs["page_errors"]) < 30 else None)
+    page.on("requestfailed", lambda req: obs["failed_requests"].append({"url": req.url.split("?")[0], "error": req.failure or "unknown"}) if len(obs["failed_requests"]) < 50 else None)
+    page.on("response", lambda res: obs["http_errors"].append({"url": res.url.split("?")[0], "status": res.status}) if res.status >= 400 and len(obs["http_errors"]) < 50 else None)
 
-def navigate_with_retries(page, url: str, attempts: int = 3):
-    """Retry transient upstream navigation failures with a strict attempt budget."""
-    last_error = None
-    for attempt in range(1, attempts + 1):
-        try:
-            # Commit is the navigation boundary; the document's DOM and tested
-            # controls are validated separately below with bounded locator waits.
-            # Waiting for DOMContentLoaded can time out when an upstream resource stalls,
-            # even when the document and its controls are already usable.
-            response = page.goto(url, wait_until="commit", timeout=20000)
-            if response is not None and response.status >= 500 and attempt < attempts:
-                page.wait_for_timeout(1000 * attempt)
-                continue
-            return response
-        except Exception as exc:
-            last_error = exc
-            if attempt == attempts:
-                raise
-            page.wait_for_timeout(1000 * attempt)
-    if last_error is not None:
-        raise last_error
-    return None
-
-
-def wait_for_visible_with_one_reload(page, locator_factory, url: str, test: dict, control_description: str):
-    """Recover from a stalled renderer with bounded reload and fresh-page retry."""
+def bounded_diagnostics(page, test, prefix):
+    diag = {"final_url": (page.url or "")[:500], "is_closed": page.is_closed()}
     try:
-        locator_factory(page).wait_for(state="visible", timeout=8000)
-        return page
-    except PlaywrightTimeoutError as first_error:
-        test["notes"].append(
-            f"Readiness retry: {control_description} was not visible on the first attempt; reloaded the same URL once."
-        )
-        try:
-            page.goto(url, wait_until="commit", timeout=20000)
-            locator_factory(page).wait_for(state="visible", timeout=8000)
-            return page
-        except Exception as second_error:
-            # A renderer can remain wedged after navigation returns a response. A fresh
-            # page gives the same viewport and target URL a new renderer/page lifecycle.
-            test["notes"].append(
-                f"Fresh-page recovery: same-page retry failed ({type(second_error).__name__}); opening a new page."
-            )
-            try:
-                page.close()
-            except Exception:
-                pass
-            fresh_page = page.context.new_page()
-            fresh_page.set_default_timeout(15000)
-            fresh_page.goto(url, wait_until="commit", timeout=20000)
-            try:
-                locator_factory(fresh_page).wait_for(state="visible", timeout=8000)
-            except PlaywrightTimeoutError as third_error:
-                # Preserve the live diagnostic page so the caller can capture the
-                # actual response body and screenshot instead of inspecting a closed page.
-                test["_recovery_page"] = fresh_page
-                raise AssertionError(
-                    f"Control remained unavailable after bounded reload and fresh-page retry. "
-                    f"Initial timeout: {first_error}; reload retry: {second_error}; fresh-page retry: {third_error}"
-                ) from third_error
-            return fresh_page
+        diag["document_state"] = page.evaluate("document.readyState", timeout=2000)
+        diag["body_present"] = page.locator("body").count() > 0
+        diag["body_text_excerpt"] = page.locator("body").inner_text(timeout=2000)[:1500]
+    except Exception as exc:
+        diag["renderer_diagnostic_error"] = f"{type(exc).__name__}: {str(exc)[:400]}"
+    try:
+        shot = OUT / "screenshots" / f"{prefix}-error.png"
+        page.screenshot(path=str(shot), full_page=False, timeout=3000, animations="disabled")
+        test["screenshots"].append(str(shot.relative_to(OUT)))
+    except Exception as exc:
+        diag["screenshot_error"] = f"{type(exc).__name__}: {str(exc)[:300]}"
+    test["diagnostics"] = diag
 
+def run_test(playwright, device, viewport, kind):
+    url = f"{TARGET}/checkboxes" if kind == "checkboxes" else f"{TARGET}/add_remove_elements/"
+    test = {"id": f"{'QA-001' if kind == 'checkboxes' else 'QA-002'}-{device}",
+            "name": "Checkboxes toggle and restore state" if kind == "checkboxes" else "Add/remove element control updates the page",
+            "url": url, "status": "FAIL", "steps": [], "observed": {}, "screenshots": [], "notes": []}
+    obs = {"console_errors": [], "page_errors": [], "failed_requests": [], "http_errors": [], "blocked_telemetry_requests": 0}
+    browser = context = page = None
+    try:
+        # A fresh browser process for every functional test, not just a new page/context.
+        browser = playwright.chromium.launch(headless=True)
+        test["browser_version"] = browser.version
+        context = browser.new_context(viewport=viewport, device_scale_factor=1, is_mobile=False, has_touch=False, ignore_https_errors=False)
+        def route_request(route):
+            host = (urlparse(route.request.url).hostname or "").lower()
+            if any(host == suffix or host.endswith("." + suffix) for suffix in TELEMETRY_SUFFIXES):
+                obs["blocked_telemetry_requests"] += 1
+                route.abort()
+            else:
+                route.continue_()
+        context.route("**/*", route_request)
+        page = context.new_page()
+        page.set_default_timeout(5000)
+        attach_diagnostics(page, obs)
+        response = page.goto(url, wait_until="domcontentloaded", timeout=15000)
+        test["http_status"] = response.status if response else None
+        if response and response.status >= 400:
+            raise AssertionError(f"Navigation returned HTTP {response.status}")
+        if kind == "checkboxes":
+            controls = page.locator('input[type="checkbox"]')
+            controls.first.wait_for(state="visible", timeout=6000)
+            count = controls.count()
+            if count != 2:
+                raise AssertionError(f"Expected 2 checkboxes, observed {count}")
+            initial = [controls.nth(i).is_checked() for i in range(count)]
+            changed, restored = [], []
+            for i in range(count):
+                controls.nth(i).click(timeout=3000)
+                changed.append(controls.nth(i).is_checked() != initial[i])
+            for i in range(count):
+                controls.nth(i).click(timeout=3000)
+                restored.append(controls.nth(i).is_checked() == initial[i])
+            test["steps"] = ["Open /checkboxes", "Record initial checkbox states", "Toggle both checkboxes", "Verify restoration"]
+            test["observed"] = {"checkbox_count": count, "initial_checked_states": initial, "each_toggled": changed,
+                                "each_restored": restored, "final_checked_states": [controls.nth(i).is_checked() for i in range(count)]}
+            if not all(changed) or not all(restored):
+                raise AssertionError("At least one checkbox failed to toggle and restore")
+        else:
+            add = page.get_by_role("button", name="Add Element")
+            add.wait_for(state="visible", timeout=6000)
+            before = page.get_by_role("button", name="Delete").count()
+            add.click(timeout=3000)
+            delete = page.get_by_role("button", name="Delete").first
+            delete.wait_for(state="visible", timeout=3000)
+            after_add = page.get_by_role("button", name="Delete").count()
+            delete.click(timeout=3000)
+            page.wait_for_function("document.querySelectorAll('button.added-manually').length === 0", timeout=3000)
+            after_remove = page.get_by_role("button", name="Delete").count()
+            test["steps"] = ["Open /add_remove_elements/", "Verify Add Element", "Add and verify Delete", "Delete and verify removal"]
+            test["observed"] = {"delete_buttons_before_add": before, "delete_buttons_after_add": after_add, "delete_buttons_after_remove": after_remove}
+            if after_add != before + 1 or after_remove != before:
+                raise AssertionError("Add/remove counts did not return to expected state")
+        shot = OUT / "screenshots" / f"{device}-{kind}-pass.png"
+        page.screenshot(path=str(shot), full_page=True, timeout=5000, animations="disabled")
+        test["screenshots"].append(str(shot.relative_to(OUT)))
+        test["status"] = "PASS"
+    except Exception as exc:
+        test["notes"].append(f"{type(exc).__name__}: {str(exc)[:1200]}")
+        if page is not None and not page.is_closed():
+            bounded_diagnostics(page, test, f"{device}-{kind}")
+    finally:
+        test["runtime_observations"] = obs
+        for obj in (context, browser):
+            if obj is not None:
+                try:
+                    obj.close()
+                except Exception:
+                    pass
+    return test
 
-def main() -> int:
-    # This first portfolio runner is deliberately pinned to the public training site.
+def main():
     parsed = urlparse(TARGET)
     if parsed.scheme != "https" or parsed.hostname != "the-internet.herokuapp.com":
         raise ValueError("Portfolio runner is restricted to the approved demo host.")
-
     OUT.mkdir(parents=True, exist_ok=True)
-    evidence_dir = OUT / "screenshots"
-    evidence_dir.mkdir(parents=True, exist_ok=True)
-    results: list[dict] = []
-    started = utc_now()
-
-    with sync_playwright() as p:
-        browser_version = None
-        # Reuse one Chromium process across viewport contexts. CI evidence shows
-        # desktop checks pass, then a second Chromium launch can produce a frozen
-        # renderer for every mobile check. Fresh contexts still isolate viewport state.
-        # Use Playwright's supported Chromium defaults. The previous custom
-        # renderer/backgrounding flags were experimental and did not prevent
-        # renderer hangs; remove them to restore the standard CI browser path.
-        browser = p.chromium.launch(headless=True)
-        browser_version = browser.version
+    (OUT / "screenshots").mkdir(parents=True, exist_ok=True)
+    results, started, browser_version = [], utc_now(), None
+    with sync_playwright() as playwright:
         for device, viewport in VIEWPORTS.items():
-            context = browser.new_context(
-                viewport=viewport,
-                device_scale_factor=1,
-                is_mobile=False,  # Keep Chromium desktop mode and vary viewport only for responsive-layout checks.
-                has_touch=False,
-                ignore_https_errors=False,
-            )
-            # Do not intercept page resources during the baseline reproduction.
-            # Earlier analytics-route experiments did not resolve the renderer hang
-            # and could obscure whether the failure is in Chromium or the target page.
-            page = context.new_page()
-            page.set_default_timeout(15000)
-            console_errors: list[str] = []
-            page_errors: list[str] = []
-            failed_requests: list[dict[str, str]] = []
-            http_errors: list[dict[str, object]] = []
-            page.on("console", lambda msg: console_errors.append(msg.text) if msg.type == "error" else None)
-            page.on("pageerror", lambda error: page_errors.append(str(error)))
-            page.on("requestfailed", lambda request: failed_requests.append({"url": request.url, "error": request.failure or "unknown"}))
-            page.on("response", lambda response: http_errors.append({"url": response.url, "status": response.status}) if response.status >= 400 else None)
-
-            # Test 1: checkbox state transitions and restoration.
-            checkbox_url = f"{TARGET}/checkboxes"
-            test1 = {
-                "id": f"QA-001-{device}",
-                "name": "Checkboxes toggle and restore state",
-                "url": checkbox_url,
-                "status": "ERROR",
-                "steps": [
-                    "Open /checkboxes",
-                    "Record the initial checked state of both checkboxes",
-                    "Click each checkbox once and verify its state changes",
-                    "Click each checkbox again and verify its initial state is restored",
-                ],
-                "observed": {},
-                "screenshots": [],
-                "notes": [],
-            }
-            response = None
-            try:
-                response = navigate_with_retries(page, checkbox_url)
-                test1["http_status"] = response.status if response else None
-                # Record status and observed browser behavior without reading an unbounded
-                # streaming response body; a stalled body must not hang the entire QA run.
-                page = wait_for_visible_with_one_reload(page, lambda active_page: active_page.locator("input[type=checkbox]").first, checkbox_url, test1, "first checkbox")
-                checks = page.locator("input[type=checkbox]")
-                count = checks.count()
-                if count != 2:
-                    raise AssertionError(f"Expected 2 checkboxes, observed {count}")
-                initial = [checks.nth(i).is_checked() for i in range(count)]
-                shot = evidence_dir / f"{device}-checkboxes-initial.png"
-                page.screenshot(path=str(shot), full_page=True, animations="disabled", timeout=20000)
-                test1["screenshots"].append(str(shot.relative_to(OUT)))
-                changed = []
-                restored = []
-                for i in range(count):
-                    checks.nth(i).click()
-                    changed.append(checks.nth(i).is_checked() != initial[i])
-                for i in range(count):
-                    checks.nth(i).click()
-                    restored.append(checks.nth(i).is_checked() == initial[i])
-                final_shot = evidence_dir / f"{device}-checkboxes-restored.png"
-                page.screenshot(path=str(final_shot), full_page=True, animations="disabled", timeout=20000)
-                test1["screenshots"].append(str(final_shot.relative_to(OUT)))
-                test1["observed"] = {
-                    "checkbox_count": count,
-                    "initial_checked_states": initial,
-                    "each_toggled": changed,
-                    "each_restored": restored,
-                    "final_checked_states": [checks.nth(i).is_checked() for i in range(count)],
-                }
-                if not all(changed) or not all(restored):
-                    raise AssertionError("At least one checkbox did not toggle and restore as expected")
-                test1["status"] = "PASS"
-            except Exception as exc:
-                page = test1.pop("_recovery_page", page)
-                test1["status"] = "FAIL"
-                test1["notes"].append(f"{type(exc).__name__}: {exc}")
-                try:
-                    test1["diagnostics"] = {
-                        "final_url": page.url,
-                        "body_text_excerpt": page.locator("body").inner_text(timeout=3000)[:2000],
-                        "body_html_excerpt": page.locator("body").inner_html(timeout=3000)[:4000],
-                    }
-                except Exception as diagnostic_exc:
-                    test1["notes"].append(f"Diagnostic capture failed: {type(diagnostic_exc).__name__}: {diagnostic_exc}")
-                try:
-                    shot = evidence_dir / f"{device}-checkboxes-error.png"
-                    page.screenshot(path=str(shot), full_page=False, timeout=5000)
-                    test1["screenshots"].append(str(shot.relative_to(OUT)))
-                except Exception as screenshot_exc:
-                    test1["notes"].append(f"Error screenshot capture failed: {type(screenshot_exc).__name__}: {screenshot_exc}")
-            results.append(test1)
-
-            # Isolate each test in a fresh page so pending third-party resources or page state
-            # from the previous navigation cannot contaminate the next test.
-            try:
-                page.close()
-            except Exception:
-                pass
-            page = context.new_page()
-            page.set_default_timeout(15000)
-            page.on("console", lambda msg: console_errors.append(msg.text) if msg.type == "error" else None)
-            page.on("pageerror", lambda error: page_errors.append(str(error)))
-            page.on("requestfailed", lambda request: failed_requests.append({"url": request.url, "error": request.failure or "unknown"}))
-            page.on("response", lambda response: http_errors.append({"url": response.url, "status": response.status}) if response.status >= 400 else None)
-
-            # Test 2: adding and removing a UI element.
-            add_url = f"{TARGET}/add_remove_elements/"
-            test2 = {
-                "id": f"QA-002-{device}",
-                "name": "Add/remove element control updates the page",
-                "url": add_url,
-                "status": "ERROR",
-                "steps": [
-                    "Open /add_remove_elements/",
-                    "Verify the Add Element control is present",
-                    "Click Add Element and verify a Delete control appears",
-                    "Click Delete and verify the added control is removed",
-                ],
-                "observed": {},
-                "screenshots": [],
-                "notes": [],
-            }
-            response = None
-            try:
-                response = navigate_with_retries(page, add_url)
-                test2["http_status"] = response.status if response else None
-                # Record status and observed browser behavior without reading an unbounded
-                # streaming response body; a stalled body must not hang the entire QA run.
-                add_button = page.get_by_role("button", name="Add Element")
-                page = wait_for_visible_with_one_reload(page, lambda active_page: active_page.get_by_role("button", name="Add Element"), add_url, test2, "Add Element button")
-                # The recovery path may replace the page; reacquire locators from the active page.
-                add_button = page.get_by_role("button", name="Add Element")
-                before = page.get_by_role("button", name="Delete").count()
-                shot = evidence_dir / f"{device}-add-remove-initial.png"
-                page.screenshot(path=str(shot), full_page=True)
-                test2["screenshots"].append(str(shot.relative_to(OUT)))
-                add_button.click()
-                page.get_by_role("button", name="Delete").first.wait_for(state="visible")
-                after_add = page.get_by_role("button", name="Delete").count()
-                after_add_shot = evidence_dir / f"{device}-add-remove-added.png"
-                page.screenshot(path=str(after_add_shot), full_page=True, animations="disabled", timeout=20000)
-                test2["screenshots"].append(str(after_add_shot.relative_to(OUT)))
-                page.get_by_role("button", name="Delete").first.click()
-                page.wait_for_function("document.querySelectorAll('button.added-manually').length === 0")
-                after_remove = page.get_by_role("button", name="Delete").count()
-                final_shot = evidence_dir / f"{device}-add-remove-removed.png"
-                page.screenshot(path=str(final_shot), full_page=True)
-                test2["screenshots"].append(str(final_shot.relative_to(OUT)))
-                test2["observed"] = {
-                    "delete_buttons_before_add": before,
-                    "delete_buttons_after_add": after_add,
-                    "delete_buttons_after_remove": after_remove,
-                }
-                if after_add != before + 1 or after_remove != before:
-                    raise AssertionError("Add/remove counts did not return to the expected state")
-                test2["status"] = "PASS"
-            except Exception as exc:
-                page = test2.pop("_recovery_page", page)
-                test2["status"] = "FAIL"
-                test2["notes"].append(f"{type(exc).__name__}: {exc}")
-                try:
-                    test2["diagnostics"] = {
-                        "final_url": page.url,
-                        "body_text_excerpt": page.locator("body").inner_text(timeout=3000)[:2000],
-                        "body_html_excerpt": page.locator("body").inner_html(timeout=3000)[:4000],
-                    }
-                except Exception as diagnostic_exc:
-                    test2["notes"].append(f"Diagnostic capture failed: {type(diagnostic_exc).__name__}: {diagnostic_exc}")
-                try:
-                    shot = evidence_dir / f"{device}-add-remove-error.png"
-                    page.screenshot(path=str(shot), full_page=False, timeout=5000)
-                    test2["screenshots"].append(str(shot.relative_to(OUT)))
-                except Exception as screenshot_exc:
-                    test2["notes"].append(f"Error screenshot capture failed: {type(screenshot_exc).__name__}: {screenshot_exc}")
-            results.append(test2)
-
-            runtime = {
-                "console_errors": console_errors[:30],
-                "page_errors": page_errors[:30],
-                "failed_requests": failed_requests[:50],
-                "http_errors": http_errors[:50],
-            }
-            test1["runtime_observations"] = runtime
-            test2["runtime_observations"] = runtime
-            # Close each viewport context before browser teardown so the next viewport
-            # starts cleanly; diagnostics above are bounded and already captured.
-            context.close()
-        browser.close()
-
+            for kind in ("checkboxes", "add_remove"):
+                result = run_test(playwright, device, viewport, kind)
+                browser_version = result.get("browser_version", browser_version)
+                results.append(result)
     ended = utc_now()
-    passed = sum(1 for item in results if item["status"] == "PASS")
-    failed = sum(1 for item in results if item["status"] == "FAIL")
-    report = {
-        "title": "CYDRA Website QA Portfolio Sample",
-        "target": TARGET,
-        "target_type": "Public training/demo website; not a production client",
-        "started_at_utc": started,
-        "ended_at_utc": ended,
-        "environment": {
-            "platform": platform.platform(),
-            "python": sys.version.split()[0],
-            "browser": "Chromium",
-            "browser_version": browser_version,
-            "viewports": VIEWPORTS,
-            "mobile_note": "Mobile coverage is a 390x844 narrow viewport only; touch interaction and physical-device behavior are not certified.",
-            "test_harness_adjustments": ["Baseline browser checks do not intercept page resources or target requests; third-party telemetry failures may appear in runtime observations."],
-        },
-        "summary": {"total": len(results), "passed": passed, "failed": failed},
-        "tests": results,
-        "interpretation": (
-            "This report records observed UI behavior on a public training site. "
-            "A failed test is a test discrepancy requiring triage, not automatically a production defect or security finding. "
-            "Console errors and page errors are contextual observations, not findings by themselves."
-        ),
-    }
+    passed = sum(item["status"] == "PASS" for item in results)
+    failed = sum(item["status"] == "FAIL" for item in results)
+    report = {"title": "CYDRA Website Quality Assurance", "target": TARGET,
+              "target_type": "Public training/demo website; not a production client",
+              "started_at_utc": started, "ended_at_utc": ended,
+              "environment": {"platform": platform.platform(), "python": sys.version.split()[0],
+                              "browser": "Chromium", "browser_version": browser_version, "viewports": VIEWPORTS,
+                              "mobile_note": "390x844 narrow viewport only; physical-device and touch certification are not claimed.",
+                              "test_harness_adjustments": ["Every check runs in a new Chromium process, context, and page.",
+                                  "Known Optimizely telemetry is blocked to isolate third-party analytics; first-party target requests are untouched.",
+                                  "Navigation and renderer diagnostics use bounded timeouts."]},
+              "summary": {"total": len(results), "passed": passed, "failed": failed}, "tests": results,
+              "interpretation": "A failed test is a test discrepancy, not automatically a production defect. Telemetry isolation is not proof telemetry caused prior failures."}
     write_json(OUT / "report.json", report)
-
-    lines = [
-        "<div align=\"center\">",
-        "",
-        "# CYDRA",
-        "**WEBSITE QUALITY ASSURANCE**",
-        "",
-        "*Independent, evidence-led website testing*",
-        "",
-        "---",
-        "",
-        "**FUNCTIONAL QA REPORT**",
-        "",
-        "</div>",
-        "",
-        f"> **Report status:** {'PASS' if failed == 0 else 'ATTENTION REQUIRED'}  ",
-        f"> **Prepared:** {ended[:10]} (UTC)  ",
-        "> **Engagement:** Demonstration assessment — public training website",
-        "",
-        "## Executive summary",
-        "",
-        f"CYDRA ran **{len(results)} functional checks** across desktop and mobile-emulated browser sizes. **{passed} passed and {failed} failed.**",
-        "",
-        ("**Overall result: PASS.** The selected interactions behaved as expected in this run. This is a limited functional sample, not a full-site audit, security certification, or guarantee that the website has no defects."
-         if failed == 0 else
-         "**Overall result: ATTENTION REQUIRED.** One or more checks did not meet the expected result. Review the individual observations and evidence before drawing conclusions."),
-        "",
-        "### What this means in plain English",
-        "",
-        f"- **Checkboxes:** {sum(1 for item in results if item['id'].startswith('QA-001') and item['status'] == 'PASS')} of {sum(1 for item in results if item['id'].startswith('QA-001'))} viewport checks passed.",
-        f"- **Add and remove:** {sum(1 for item in results if item['id'].startswith('QA-002') and item['status'] == 'PASS')} of {sum(1 for item in results if item['id'].startswith('QA-002'))} viewport checks passed.",
-        "- **Screen sizes:** See the environment.viewports field in report.json; this is not physical-device certification.",
-        "- **Evidence:** screenshots and any capture failures are listed with each individual test result.",
-        "",
-        "## Assessment details",
-        "",
-        f"- **Website tested:** [{TARGET}]({TARGET})",
-        "- **Target type:** Public training/demo website; not a production client",
-        f"- **Run started (UTC):** {started}",
-        f"- **Run ended (UTC):** {ended}",
-        f"- **Environment:** Chromium {browser_version}; Python {sys.version.split()[0]}",
-        "- **Coverage:** desktop viewport 1365×900 and narrow viewport 390×844 (viewport-only; no physical-device certification)",
-        "- **Evidence:** automated screenshots attached as workflow artifacts",
-        "",
-        "## Summary",
-        "",
-        f"- Total checks: **{len(results)}**",
-        f"- Passed: **{passed}**",
-        f"- Failed: **{failed}**",
-        "",
-        "## Results",
-        "",
-    ]
+    lines = ["# CYDRA Website Quality Assurance", "", f"Result: {'PASS' if failed == 0 else 'ATTENTION REQUIRED'}",
+             f"Prepared: {ended}", f"Target: {TARGET}", "", f"Checks: {len(results)} total; {passed} passed; {failed} failed.", "",
+             "Each check uses a separate Chromium process. Known Optimizely telemetry is blocked for functional isolation. Narrow-viewport sample only; not physical-device certification.", ""]
     for item in results:
-        if item["id"].startswith("QA-001"):
-            plain_result = (
-                "Both checkboxes changed state when selected and returned to their original states."
-                if item["status"] == "PASS" else
-                "The checkbox interaction did not meet every expected state change. Review the notes and screenshots."
-            )
-        else:
-            observed = item.get("observed", {})
-            plain_result = (
-                f"The Delete control count changed from {observed.get('delete_buttons_before_add', 'unknown')} "
-                f"to {observed.get('delete_buttons_after_add', 'unknown')} after adding, then to "
-                f"{observed.get('delete_buttons_after_remove', 'unknown')} after removing."
-                if item["status"] == "PASS" else
-                "The add/remove interaction did not meet every expected count. Review the notes and screenshots."
-            )
-        lines.extend([
-            f"### {item['id']}: {item['name']}",
-            "",
-            f"- **Status:** {item['status']}",
-            f"- **Plain-English result:** {plain_result}",
-            f"- **URL:** {item['url']}",
-            f"- **HTTP status:** {item.get('http_status', 'not recorded')}",
-            "- **Steps:**",
-        ])
-        lines.extend([f"  {i}. {step}" for i, step in enumerate(item["steps"], 1)])
-        lines.extend(["", "**Observed data:**", "", "~~~json", json.dumps(item["observed"], indent=2), "~~~", ""])
-        if item["notes"]:
-            lines.extend(["**Notes:**", ""])
-            lines.extend([f"- {note}" for note in item["notes"]])
-            lines.append("")
-        lines.extend(["**Screenshots:**", ""])
-        if item["screenshots"]:
-            lines.extend([f"- {path}" for path in item["screenshots"]])
-        else:
-            lines.append("- No screenshot was captured.")
-        runtime = item.get("runtime_observations", {})
-        if runtime.get("console_errors") or runtime.get("page_errors"):
-            lines.extend(["", "**Runtime observations (not automatically defects):**", ""])
-            lines.extend([f"- Console errors: {len(runtime.get('console_errors', []))}",
-                          f"- Page errors: {len(runtime.get('page_errors', []))}"])
-        lines.append("")
-    lines.extend([
-        "## Evidence and limitations",
-        "",
-        report["interpretation"],
-        "",
-        "This is a sample automation run, not a claim of paid client experience. The narrow viewport is a responsive-layout check only; it does not certify touch behavior or physical devices. Page resources and target requests are not intercepted; third-party telemetry failures may appear in runtime observations and are not automatically application defects. Any failure must be independently reproduced and assessed for user impact before being described as a defect.",
-        "",
-    ])
+        lines += [f"## {item['id']}: {item['name']}", f"Status: {item['status']}", f"URL: {item['url']}",
+                  f"HTTP: {item.get('http_status')}", "", "Observed JSON:", json.dumps(item.get("observed", {}), indent=2), "",
+                  "Notes:", *[f"- {note}" for note in item["notes"]], "", "Runtime observations:",
+                  json.dumps(item.get("runtime_observations", {}), indent=2)[:6000], ""]
     (OUT / "report.md").write_text("\n".join(lines), encoding="utf-8")
-
-    image_sections = []
-    for item in results:
-        for relative in item["screenshots"]:
-            path = OUT / relative
-            if not path.exists():
-                continue
-            data = base64.b64encode(path.read_bytes()).decode("ascii")
-            label = html.escape(f"{item['id']} — {relative}")
-            image_sections.append(
-                f"<section class='evidence'><h3>{label}</h3>"
-                f"<img src='data:image/png;base64,{data}' alt='{label}' /></section>"
-            )
-    def plain_english_result(item: dict) -> str:
-        observed = item.get("observed", {})
-        if item["id"].startswith("QA-001"):
-            if item["status"] == "PASS":
-                return "Both checkboxes changed when selected and returned to their original states."
-            return "The checkbox interaction did not meet every expected state change. See notes and screenshots."
-        if item["status"] == "PASS":
-            return (
-                f"Delete controls: {observed.get('delete_buttons_before_add', 'unknown')} before adding, "
-                f"{observed.get('delete_buttons_after_add', 'unknown')} after adding, and "
-                f"{observed.get('delete_buttons_after_remove', 'unknown')} after removing."
-            )
-        return "The add/remove interaction did not meet every expected count. See notes and screenshots."
-
-    result_rows = "".join(
-        "<tr>"
-        f"<td>{html.escape(item['id'])}</td>"
-        f"<td>{html.escape(item['name'])}</td>"
-        f"<td class='status-cell {item['status'].lower()}'>{html.escape(item['status'])}</td>"
-        f"<td>{html.escape(plain_english_result(item) + (' One page reload was needed after an initial readiness timeout.' if any(note.startswith('Readiness retry:') for note in item.get('notes', [])) else ''))}</td>"
-        "</tr>"
-        for item in results
-    )
-    pdf_html = f"""<!doctype html><html><head><meta charset="utf-8"><style>
-    @page{{size:A4;margin:18mm 16mm 20mm;@bottom-right{{content:"CYDRA · Functional QA Report · Page " counter(page);font-size:8pt;color:#667085}}}}
-    body{{font-family:Arial,sans-serif;color:#172033;margin:0;font-size:10pt;line-height:1.45}}
-    .letterhead{{border-bottom:3px solid #163a63;padding:0 0 12px;margin-bottom:22px}}
-    .brand{{font-size:23pt;letter-spacing:3px;font-weight:800;color:#163a63;margin:0}}
-    .brandline{{font-size:9pt;letter-spacing:1.5px;font-weight:bold;color:#344054;margin-top:2px}}
-    .document-type{{margin-top:16px;font-size:15pt;font-weight:bold;color:#163a63}}
-    .report-meta{{background:#f4f7fb;border-left:4px solid #163a63;padding:10px 12px;margin:14px 0 20px}}
-    h1{{font-size:22pt;color:#163a63}} h2{{margin-top:24px;border-bottom:1px solid #d0d5dd;padding-bottom:5px;color:#163a63}}
-    h3{{font-size:12pt;color:#344054}} .muted{{color:#555}} .summary{{font-size:12pt;font-weight:bold}}
-    .result-pass{{color:#087443;font-weight:bold}} .result-fail{{color:#b42318;font-weight:bold}}
-    table{{width:100%;table-layout:fixed;border-collapse:collapse;font-size:9pt}}
-    th,td{{border:1px solid #ccd2da;padding:7px;vertical-align:top;overflow-wrap:break-word;word-break:normal}}
-    .results-table th:nth-child(1),.results-table td:nth-child(1){{width:18%}}
-    .results-table th:nth-child(2),.results-table td:nth-child(2){{width:28%}}
-    .results-table th:nth-child(3),.results-table td:nth-child(3){{width:12%}}
-    .results-table th:nth-child(4),.results-table td:nth-child(4){{width:42%}}
-    .status-cell{{white-space:nowrap}}
-    th{{background:#eaf0f7;text-align:left}} .pass{{color:#087443;font-weight:bold}} .fail{{color:#b42318;font-weight:bold}}
-    .evidence{{page-break-inside:avoid;margin:16px 0}} img{{max-width:100%;max-height:520px;object-fit:contain;border:1px solid #ddd}}
-    .plain-english{{background:#f8fafc;padding:12px;border:1px solid #d0d5dd}}
-    </style></head><body>
-    <header class="letterhead"><p class="brand">CYDRA</p><div class="brandline">WEBSITE QUALITY ASSURANCE</div><div class="document-type">FUNCTIONAL QA REPORT</div><p class="muted">Evidence-led testing · Clear results · Reproducible observations</p></header>
-    <div class="report-meta"><b>Report date (UTC):</b> {html.escape(ended[:10])}<br>
-    <b>Report outcome:</b> <span class="{'result-pass' if failed == 0 else 'result-fail'}">{'PASS' if failed == 0 else 'ATTENTION REQUIRED'}</span><br>
-    <b>Engagement type:</b> Demonstration assessment on a public training website</div>
-    <h2>Executive summary</h2>
-    <p class="summary">{len(results)} checks completed · {passed} passed · {failed} failed</p>
-    <div class="plain-english"><b>What this means:</b> {'The selected page interactions behaved as expected during this run. This is a limited functional sample, not a full-site audit, security certification, or guarantee that the website has no defects.' if failed == 0 else 'One or more checks did not meet the expected result. Review the observations and screenshots before deciding whether the behaviour is a defect.'}</div>
-    <h2>Assessment details</h2>
-    <p class="muted">Automated functional checks on a public training website — not a production client engagement.</p>
-    <p><b>Website:</b> {html.escape(TARGET)}<br>
-    <b>Run started (UTC):</b> {html.escape(started)}<br>
-    <b>Run ended (UTC):</b> {html.escape(ended)}<br>
-    <b>Environment:</b> Chromium {html.escape(browser_version)}; desktop 1365×900 and narrow viewport 390×844 (viewport-only)</p>
-    <p><b>Coverage in this report:</b> checkbox state changes and add/remove element behaviour at two viewport sizes.</p>
-    <h2>Test results</h2><table class="results-table"><thead><tr><th>ID</th><th>Test</th><th>Status</th><th>Result in plain English</th></tr></thead><tbody>{result_rows}</tbody></table>
-    <h2>Evidence screenshots</h2>{''.join(image_sections)}
-    <h2>Interpretation and limitations</h2><p>{html.escape(report['interpretation'])}</p>
-    <p>Narrow-viewport coverage is responsive-layout testing only; touch behavior and physical devices are not certified. No target requests are intercepted; failed requests and runtime errors are recorded as observations. A failed test is a discrepancy requiring triage, not automatically a defect or security finding. Runtime errors are context only.</p>
-    </body></html>"""
-    with sync_playwright() as p:
-        pdf_browser = p.chromium.launch(headless=True)
-        pdf_page = pdf_browser.new_page()
-        pdf_page.set_content(pdf_html, wait_until="load")
-        pdf_page.pdf(path=str(OUT / "report.pdf"), format="A4", print_background=True, prefer_css_page_size=True)
-        pdf_browser.close()
-
-    print(f"QA portfolio run complete: passed={passed} failed={failed}")
-    print(f"Artifacts: {OUT / 'report.md'}, {OUT / 'report.pdf'}, {OUT / 'report.json'}, {evidence_dir}")
-    # A green workflow requires every asserted behavior to pass. Environmental blockers remain failures until triaged.
     return 0 if failed == 0 else 1
-
 
 if __name__ == "__main__":
     raise SystemExit(main())
