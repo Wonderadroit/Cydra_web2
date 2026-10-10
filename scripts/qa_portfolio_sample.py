@@ -14,10 +14,19 @@ from playwright.sync_api import TimeoutError as PlaywrightTimeoutError, sync_pla
 
 TARGET = "https://the-internet.herokuapp.com"
 OUT = Path(os.environ.get("CYDRA_QA_OUT", "artifacts/qa-portfolio"))
-VIEWPORTS = {
+ALL_VIEWPORTS = {
     "desktop": {"width": 1365, "height": 900},
     "mobile": {"width": 390, "height": 844},
 }
+# Each viewport runs in its own GitHub-hosted job to isolate Chromium renderer
+# state. "all" remains available for a local combined run.
+_requested_viewport = os.environ.get("CYDRA_QA_VIEWPORT", "all").strip().lower()
+if _requested_viewport not in {"all", *ALL_VIEWPORTS}:
+    raise ValueError("CYDRA_QA_VIEWPORT must be 'all', 'desktop', or 'mobile'.")
+VIEWPORTS = (
+    ALL_VIEWPORTS if _requested_viewport == "all"
+    else {_requested_viewport: ALL_VIEWPORTS[_requested_viewport]}
+)
 
 
 def utc_now() -> str:
@@ -108,7 +117,10 @@ def main() -> int:
         # Reuse one Chromium process across viewport contexts. CI evidence shows
         # desktop checks pass, then a second Chromium launch can produce a frozen
         # renderer for every mobile check. Fresh contexts still isolate viewport state.
-        browser = p.chromium.launch(headless=True, args=["--disable-gpu", "--disable-dev-shm-usage"])
+        # Use Playwright's supported Chromium defaults. The previous custom
+        # renderer/backgrounding flags were experimental and did not prevent
+        # renderer hangs; remove them to restore the standard CI browser path.
+        browser = p.chromium.launch(headless=True)
         browser_version = browser.version
         for device, viewport in VIEWPORTS.items():
             context = browser.new_context(
@@ -118,12 +130,9 @@ def main() -> int:
                 has_touch=False,
                 ignore_https_errors=False,
             )
-            # A/B comparison: runs without this legacy third-party analytics script
-            # had renderer stalls on all four checks; retain this narrow script route
-            # alongside the known telemetry endpoint route. Application assets and
-            # tested page requests remain unmodified.
-            context.route("https://the-internet.herokuapp.com/js/vendor/298279967.js", lambda route: route.fulfill(status=200, content_type="application/javascript", body=""))
-            context.route("https://298279967.log.optimizely.com/**", lambda route: route.abort())
+            # Do not intercept page resources during the baseline reproduction.
+            # Earlier analytics-route experiments did not resolve the renderer hang
+            # and could obscure whether the failure is in Chromium or the target page.
             page = context.new_page()
             page.set_default_timeout(15000)
             console_errors: list[str] = []
@@ -321,7 +330,7 @@ def main() -> int:
             "browser_version": browser_version,
             "viewports": VIEWPORTS,
             "mobile_note": "Mobile coverage is a 390x844 narrow viewport only; touch interaction and physical-device behavior are not certified.",
-            "test_harness_adjustments": ["The legacy Optimizely analytics script is replaced with an empty successful JavaScript response, and its telemetry endpoint is blocked, to isolate third-party analytics without surfacing an intentional failed-script request; tested application requests are not intercepted."],
+            "test_harness_adjustments": ["Baseline browser checks do not intercept page resources or target requests; third-party telemetry failures may appear in runtime observations."],
         },
         "summary": {"total": len(results), "passed": passed, "failed": failed},
         "tests": results,
@@ -361,9 +370,9 @@ def main() -> int:
         "",
         "### What this means in plain English",
         "",
-        f"- **Checkboxes:** {sum(1 for item in results if item['id'].startswith('QA-001') and item['status'] == 'PASS')} of 2 viewport checks passed.",
-        f"- **Add and remove:** {sum(1 for item in results if item['id'].startswith('QA-002') and item['status'] == 'PASS')} of 2 viewport checks passed.",
-        "- **Screen sizes:** desktop viewport 1365×900 and narrow viewport 390×844; this is not physical-device certification.",
+        f"- **Checkboxes:** {sum(1 for item in results if item['id'].startswith('QA-001') and item['status'] == 'PASS')} of {sum(1 for item in results if item['id'].startswith('QA-001'))} viewport checks passed.",
+        f"- **Add and remove:** {sum(1 for item in results if item['id'].startswith('QA-002') and item['status'] == 'PASS')} of {sum(1 for item in results if item['id'].startswith('QA-002'))} viewport checks passed.",
+        "- **Screen sizes:** See the environment.viewports field in report.json; this is not physical-device certification.",
         "- **Evidence:** screenshots and any capture failures are listed with each individual test result.",
         "",
         "## Assessment details",
@@ -432,7 +441,7 @@ def main() -> int:
         "",
         report["interpretation"],
         "",
-        "This is a sample automation run, not a claim of paid client experience. The narrow viewport is a responsive-layout check only; it does not certify touch behavior or physical devices. The legacy Optimizely analytics script and telemetry endpoint are isolated; tested application requests are not intercepted, and failed requests/runtime errors are recorded. Any failure must be independently reproduced and assessed for user impact before being described as a defect.",
+        "This is a sample automation run, not a claim of paid client experience. The narrow viewport is a responsive-layout check only; it does not certify touch behavior or physical devices. Page resources and target requests are not intercepted; third-party telemetry failures may appear in runtime observations and are not automatically application defects. Any failure must be independently reproduced and assessed for user impact before being described as a defect.",
         "",
     ])
     (OUT / "report.md").write_text("\n".join(lines), encoding="utf-8")

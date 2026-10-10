@@ -10,6 +10,12 @@ permissions:
 
 jobs:
   website-qa-portfolio:
+    # A fresh hosted VM and Chromium process per viewport prevents one viewport's
+    # renderer lifecycle from contaminating the next viewport's evidence.
+    strategy:
+      fail-fast: false
+      matrix:
+        viewport: [desktop, mobile]
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -24,14 +30,16 @@ jobs:
           # Use the pre-provisioned Ubuntu browser libraries; avoid apt dependency
           # installation here, which can stall independently of the QA runner.
           python -m playwright install chromium
-      - name: Run desktop and narrow-viewport functional checks
+      - name: Run ${{ matrix.viewport }} functional checks
         timeout-minutes: 5
+        env:
+          CYDRA_QA_VIEWPORT: ${{ matrix.viewport }}
         run: python scripts/qa_portfolio_sample.py
       - name: Upload report, JSON observations, and screenshots
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: cydra-qa-portfolio-sample
+          name: cydra-qa-portfolio-sample-${{ matrix.viewport }}
           path: artifacts/qa-portfolio/
           if-no-files-found: warn
           retention-days: 30
