@@ -47,3 +47,15 @@ def test_observed_urls_drop_userinfo():
     assert observed == "https://example.com:8443/register"
     assert "alice" not in observed
     assert "secret" not in observed
+
+
+
+def test_origin_key_normalizes_default_https_port():
+    assert module._origin_key("https://EXAMPLE.com/register") == module._origin_key("https://example.com:443/register")
+
+
+def test_form_actions_are_origin_checked_and_failed_urls_sanitized():
+    source = MODULE.read_text()
+    assert 'action_origin = _origin_key(form["action"])' in source
+    assert 'report["blocked_external_links"].append(_safe_observed_url(form["action"]))' in source
+    assert 'report["visited"].append({"url": _safe_observed_url(normalized)' in source
