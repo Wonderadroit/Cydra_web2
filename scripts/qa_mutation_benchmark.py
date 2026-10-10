@@ -123,7 +123,7 @@ def main() -> int:
         "|---|---|---|---|---|"
     ]
     for item in results:
-        lines.append(f"| {item['case']} | {item['variant']} | {item['observed']} | {'PASS' if item['benchmark_pass'] else 'FAIL'} | {item['assertion'].replace('|', '\\|')} |")
+        lines.append(f"| {item['case']} | {item['variant']} | {item['observed']} | {'PASS' if item['benchmark_pass'] else 'FAIL'} | {item['assertion'].replace('|', '/')} |")
     lines += ["", "## Limitations", *[f"- {item}" for item in report["limitations"]], ""]
     (OUT / "report.md").write_text("\n".join(lines), encoding="utf-8")
     return 0 if failed == 0 else 1
