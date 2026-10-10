@@ -52,18 +52,18 @@ def navigate_with_retries(page, url: str, attempts: int = 3):
     return None
 
 
-def wait_for_visible_with_one_reload(page, locator, url: str, test: dict):
+def wait_for_visible_with_one_reload(page, locator_factory, url: str, test: dict, control_description: str):
     """Recover from a stalled renderer with bounded reload and fresh-page retry."""
     try:
-        locator.wait_for(state="visible", timeout=8000)
+        locator_factory(page).wait_for(state="visible", timeout=8000)
         return page
     except PlaywrightTimeoutError as first_error:
         test["notes"].append(
-            f"Readiness retry: {locator.selector} was not visible on the first attempt; reloaded the same URL once."
+            f"Readiness retry: {control_description} was not visible on the first attempt; reloaded the same URL once."
         )
         try:
             page.goto(url, wait_until="commit", timeout=20000)
-            page.locator(locator.selector).wait_for(state="visible", timeout=8000)
+            locator_factory(page).wait_for(state="visible", timeout=8000)
             return page
         except Exception as second_error:
             # A renderer can remain wedged after navigation returns a response. A fresh
@@ -79,7 +79,7 @@ def wait_for_visible_with_one_reload(page, locator, url: str, test: dict):
             fresh_page.set_default_timeout(15000)
             fresh_page.goto(url, wait_until="commit", timeout=20000)
             try:
-                fresh_page.locator(locator.selector).wait_for(state="visible", timeout=8000)
+                locator_factory(fresh_page).wait_for(state="visible", timeout=8000)
             except PlaywrightTimeoutError as third_error:
                 raise AssertionError(
                     f"Control remained unavailable after bounded reload and fresh-page retry. "
@@ -155,7 +155,7 @@ def main() -> int:
                 test1["http_status"] = response.status if response else None
                 # Record status and observed browser behavior without reading an unbounded
                 # streaming response body; a stalled body must not hang the entire QA run.
-                page = wait_for_visible_with_one_reload(page, page.locator("input[type=checkbox]").first, checkbox_url, test1)
+                page = wait_for_visible_with_one_reload(page, lambda active_page: active_page.locator("input[type=checkbox]").first, checkbox_url, test1, "first checkbox")
                 checks = page.locator("input[type=checkbox]")
                 count = checks.count()
                 if count != 2:
@@ -241,7 +241,7 @@ def main() -> int:
                 # Record status and observed browser behavior without reading an unbounded
                 # streaming response body; a stalled body must not hang the entire QA run.
                 add_button = page.get_by_role("button", name="Add Element")
-                page = wait_for_visible_with_one_reload(page, add_button, add_url, test2)
+                page = wait_for_visible_with_one_reload(page, lambda active_page: active_page.get_by_role("button", name="Add Element"), add_url, test2, "Add Element button")
                 # The recovery path may replace the page; reacquire locators from the active page.
                 add_button = page.get_by_role("button", name="Add Element")
                 before = page.get_by_role("button", name="Delete").count()
