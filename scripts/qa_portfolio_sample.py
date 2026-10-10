@@ -33,7 +33,7 @@ def attach_diagnostics(page, obs):
 def bounded_diagnostics(page, test, prefix):
     diag = {"final_url": (page.url or "")[:500], "is_closed": page.is_closed()}
     try:
-        diag["document_state"] = page.evaluate("document.readyState", timeout=2000)
+        diag["document_state"] = page.locator("html").get_attribute("data-diagnostic-ready", timeout=1500)
         diag["body_present"] = page.locator("body").count() > 0
         diag["body_text_excerpt"] = page.locator("body").inner_text(timeout=2000)[:1500]
     except Exception as exc:
@@ -69,7 +69,9 @@ def run_test(playwright, device, viewport, kind):
         page = context.new_page()
         page.set_default_timeout(5000)
         attach_diagnostics(page, obs)
-        response = page.goto(url, wait_until="domcontentloaded", timeout=15000)
+        response = page.goto(url, wait_until="commit", timeout=15000)
+        # Commit proves the main response arrived; avoid waiting on third-party resources for DOMContentLoaded.
+        page.locator("body").wait_for(state="attached", timeout=5000)
         test["http_status"] = response.status if response else None
         if response and response.status >= 400:
             raise AssertionError(f"Navigation returned HTTP {response.status}")
