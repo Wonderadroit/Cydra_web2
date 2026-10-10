@@ -7,6 +7,7 @@ from playwright.sync_api import sync_playwright
 from cydra_web2.adapter import HttpAdapter, IdentitySession
 from cydra_web2.discovery import discover
 from cydra_web2.live_config import LiveDogfoodConfig
+from cydra_web2.browser_safety import safe_observed_url
 
 
 def _states():
@@ -51,16 +52,19 @@ def main():
             network=[]
             auth_headers={}
             def on_request(request):
-                if not request.url.startswith(config.target.base_url):
+                # Exact origin comparison prevents lookalike hosts from contaminating
+                # target observations. Query strings and URL userinfo are never persisted.
+                safe_url = safe_observed_url(request.url, config.target.base_url)
+                if safe_url is None:
                     return
                 network.append({
-                    "url": request.url,
+                    "url": safe_url,
                     "method": request.method,
                 })
-                for name,value in request.headers.items():
-                    lname=name.lower()
+                for name, value in request.headers.items():
+                    lname = name.lower()
                     if lname == "authorization" or lname.startswith("x-"):
-                        auth_headers.setdefault(name,value)
+                        auth_headers.setdefault(name, value)
             page.on("request", on_request)
             page.goto(config.target.base_url, wait_until="domcontentloaded")
             page.wait_for_timeout(2000)
@@ -72,7 +76,7 @@ def main():
                     observed_paths.add(parsed.path or "/")
             browser_observations.append({
                 "identity":identity.identity_id,
-                "final_url":page.url,
+                "final_url": safe_observed_url(page.url, config.target.base_url) or "external_or_cross_origin",
                 "title":page.title(),
                 "network_requests":[x for x in network if x["method"] in {"GET","POST","PUT","PATCH","DELETE"}][:200],
                 "observed_paths":sorted(observed_paths)[:250],

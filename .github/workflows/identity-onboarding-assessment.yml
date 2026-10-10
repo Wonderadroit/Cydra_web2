@@ -1,0 +1,57 @@
+name: Web2 identity onboarding assessment
+
+on:
+  push:
+    branches:
+      - "feat/identity-lifecycle-and-browser-origin-safety"
+    paths:
+      - ".github/workflows/identity-onboarding-assessment.yml"
+      - "scripts/identity_provisioning_assessment.py"
+      - "src/cydra_web2/identity_provisioning.py"
+  pull_request:
+    paths:
+      - ".github/workflows/identity-onboarding-assessment.yml"
+      - "scripts/identity_provisioning_assessment.py"
+      - "src/cydra_web2/identity_provisioning.py"
+  workflow_dispatch:
+    inputs:
+      target_url:
+        description: "Explicitly authorized HTTPS target base URL"
+        required: true
+        default: "https://app.aurory.io"
+        type: string
+      auth_url:
+        description: "HTTPS sign-in/registration page on the target origin"
+        required: true
+        default: "https://app.aurory.io"
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  assess:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install browser assessment dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[browser]"
+          python -m playwright install --with-deps chromium
+      - name: Discover authentication options (read-only)
+        env:
+          CYDRA_TARGET_URL: ${{ inputs.target_url || 'https://app.aurory.io' }}
+          CYDRA_AUTH_URL: ${{ inputs.auth_url || 'https://app.aurory.io' }}
+        run: python scripts/identity_provisioning_assessment.py
+      - name: Upload assessment report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cydra-web2-identity-assessment
+          path: artifacts/identity-provisioning-assessment.json
+          if-no-files-found: warn
