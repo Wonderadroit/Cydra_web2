@@ -135,7 +135,7 @@ def test_discovery_retains_source_field_path_without_claiming_ownership():
 def test_nextjs_flight_chunk_extracts_multiple_records_and_keeps_provenance():
     from cydra_web2.discovery import _documents, _ids
 
-    body = r'''<script>self.__next_f.push([1,"1:{\\"items\\":[{\\"uuid\\":\\"flight-item-9\\"}]}\\n2:{\\"profile\\":{\\"user_id\\":\\"user-7\\"}}"]);</script>'''
+    body = r'''<script>self.__next_f.push([1,"1:{\"items\":[{\"uuid\":\"flight-item-9\"}]}\n2:{\"profile\":{\"user_id\":\"user-7\"}}"]);</script>'''
     docs = _documents(body)
     values = {(key, value, path) for doc in docs for key, value, path in _ids(doc)}
     assert ("uuid", "flight-item-9", "items[0].uuid") in values
@@ -145,6 +145,6 @@ def test_nextjs_flight_chunk_extracts_multiple_records_and_keeps_provenance():
 def test_nextjs_flight_deduplicates_repeated_hydration_payloads():
     from cydra_web2.discovery import _documents
 
-    payload = r'''<script>self.__next_f.push([1,"1:{\\"item\\":{\\"id\\":\\"same-item\\"}}"]);self.__next_f.push([1,"1:{\\"item\\":{\\"id\\":\\"same-item\\"}}"]);</script>'''
+    payload = r'''<script>self.__next_f.push([1,"1:{\"item\":{\"id\":\"same-item\"}}"]);self.__next_f.push([1,"1:{\"item\":{\"id\":\"same-item\"}}"]);</script>'''
     docs = _documents(payload)
     assert sum(1 for doc in docs if isinstance(doc, dict) and doc.get("item", {}).get("id") == "same-item") == 1
