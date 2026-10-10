@@ -37,7 +37,6 @@ _OPEN = re.compile(r'''\.open\s*\(\s*['\"](GET|POST|PUT|PATCH|DELETE|HEAD|OPTION
 _ASSIGN = re.compile(r'''\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(['\"])([^'\"]+)\2''')
 _COMBINED = re.compile(r'''\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*([A-Za-z_$][\w$]*)\s*\+\s*(['\"])([^'\"]+)\3''')
 _ORIGIN = re.compile(r'''(?:baseURL|baseUrl|apiBase|apiBaseUrl|API_BASE_URL|API_BASE|apiUrl|apiURL|API_URL|backendUrl|backendURL|BACKEND_URL|serviceUrl|serviceURL|SERVICE_URL|graphqlUrl|graphqlURL|GRAPHQL_URL|endpointUrl|ENDPOINT_URL|apiEndpoint|apiEndpointUrl|apiHost|apiDomain|baseApiUrl|BASE_API_URL|PUBLIC_API_URL|NEXT_PUBLIC_API_URL|VITE_API_URL)\s*[:=]\s*['\"](https?://[^'\"\s]+)''', re.I)
-_ABSOLUTE_URL = re.compile(r'''['\"](https?://[^'\"\s]+)['\"]''', re.I)
 _CSP = re.compile(r'''(?:connect-src|default-src)\s+([^;]+)''', re.I)
 
 def _api_paths(body: str):
@@ -82,13 +81,9 @@ def _analyze_bundle(path, body, target):
     constants={m.group(1):m.group(3) for m in _ASSIGN.finditer(body)}
     for m in _COMBINED.finditer(body):
         if m.group(2) in constants: constants[m.group(1)]=constants[m.group(2)]+m.group(4)
+    # Service origins require service-specific configuration or CSP evidence.
+    # Arbitrary absolute URLs in bundles may be docs, social links, examples, or test fixtures.
     endpoints=set(); origins=set(_ORIGIN.findall(body)); request_origins=set(); methods=set(); unresolved=set()
-    for absolute in _ABSOLUTE_URL.findall(body):
-        parsed=urlparse(absolute)
-        if parsed.hostname:
-            origin=f'{parsed.scheme}://{parsed.netloc}'
-            origins.add(origin)
-            request_origins.add((absolute, origin))
     for m in _REQUEST.finditer(body):
         method = 'GET' if m.group(1) else m.group(3).upper()
         expr = m.group(4); value = _resolve(expr, constants); methods.add(method)
