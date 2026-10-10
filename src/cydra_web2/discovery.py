@@ -172,19 +172,32 @@ def _ids(value, path=''):
 
 def _resolve(expr, constants):
     expr=expr.strip().strip('()')
+
+    def static_template(value):
+        # Resolve only simple identifier interpolations whose values are known
+        # static constants. Expressions, unknown names, and nested templates
+        # remain unresolved: never guess runtime values.
+        def replace(match):
+            name = match.group(1)
+            return constants.get(name, match.group(0))
+        resolved = re.sub(r'\$\{([A-Za-z_$][\\w$]*)\}', replace, value)
+        return None if "${" in resolved else resolved
+
     if len(expr)>=2 and expr[0] in "'\"\x60" and expr[-1]==expr[0]:
         value=expr[1:-1]
-        # Only resolve static template literals; interpolation needs real data-flow.
-        return None if expr[0]=="\x60" and "${" in value else value
+        return static_template(value) if expr[0]=="\x60" else value
     parts=re.split(r'\s*\+\s*',expr)
     out=[]
     for part in parts:
         part=part.strip()
         if len(part)>=2 and part[0] in "'\"\x60" and part[-1]==part[0]:
             value=part[1:-1]
-            if part[0]=="\x60" and "${" in value: return None
+            if part[0]=="\x60":
+                value=static_template(value)
+                if value is None: return None
             out.append(value)
-        elif part in constants: out.append(constants[part])
+        elif part in constants and "${" not in constants[part]:
+            out.append(constants[part])
         else: return None
     return ''.join(out)
 
