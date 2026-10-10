@@ -19,3 +19,8 @@ def test_non_https_origin_is_blocked_even_if_hostname_is_listed():
 
 def test_explicitly_approved_external_host_is_approved():
     assert classify_origin_scope("https://api.example/v1/items", {"app.example", "api.example"})["classification"] == "approved"
+
+
+def test_malformed_urls_fail_closed_instead_of_crashing():
+    for origin in ("https://[broken/api", "https://app.example:99999/api", "javascript:alert(1)"):
+        assert classify_origin_scope(origin, {"app.example"})["classification"] == "blocked"
