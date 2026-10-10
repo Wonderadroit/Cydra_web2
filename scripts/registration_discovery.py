@@ -98,6 +98,10 @@ def discover(base_url: str, output: Path) -> dict:
                         else:
                             report["blocked_external_links"].append(_safe_observed_url(link["href"]))
                 for form in forms:
+                    action_origin = _origin_key(form["action"])
+                    if action_origin != target_origin:
+                        report["blocked_external_links"].append(_safe_observed_url(form["action"]))
+                        continue
                     if REGISTER_WORDS.search(normalized + " " + title + " " + " ".join(f["label"] for f in form["fields"])):
                         safe_fields = []
                         for field in form["fields"]:
@@ -108,7 +112,7 @@ def discover(base_url: str, output: Path) -> dict:
                             safe_fields.append(item)
                         report["forms"].append({"page": _safe_observed_url(normalized), "action": _safe_observed_url(form["action"]), "method": form["method"], "fields": safe_fields})
             except Exception as exc:
-                report["visited"].append({"url": normalized, "error": type(exc).__name__})
+                report["visited"].append({"url": _safe_observed_url(normalized), "error": type(exc).__name__})
         browser.close()
     report["registration_candidates"] = list({(x["url"], x["label"]): x for x in report["registration_candidates"]}.values())
     report["blocked_external_links"] = sorted(set(report["blocked_external_links"]))
