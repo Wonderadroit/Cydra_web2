@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from enum import Enum
 import hashlib
 import json
+import re
 
 
 class EvidenceKind(str, Enum):
@@ -24,12 +25,15 @@ class Evidence:
 def response_contains_marker(body: str, marker: str) -> bool:
     if not marker:
         return False
-    if marker in body:
-        return True
     try:
         data = json.loads(body)
     except (TypeError, json.JSONDecodeError):
-        return False
+        # For non-JSON bodies, require token boundaries so a marker such as
+        # "record-12" does not match an unrelated "record-123".
+        return re.search(
+            rf"(?<![A-Za-z0-9_-]){re.escape(marker)}(?![A-Za-z0-9_-])",
+            body,
+        ) is not None
 
     def walk(value):
         if isinstance(value, dict):
