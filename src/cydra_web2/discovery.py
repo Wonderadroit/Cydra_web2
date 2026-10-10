@@ -169,7 +169,7 @@ def discover(adapter: HttpAdapter, model: TargetModel, seeds: Iterable[str]=('/'
                 queue.append(candidate)
         for key,identifier,field_path in _ids(_documents(response.body)):
             rid='resource:'+hashlib.sha256((key+'|'+identifier).encode()).hexdigest()[:16]
-            if rid not in model.resources: model.add_resource(Resource(rid,key,None,identifier,obs.id)); resource_ids.append(rid)
+            if rid not in model.resources: model.add_resource(Resource(rid,key,None,identifier,obs.id,field_path)); resource_ids.append(rid)
             endpoint=model.endpoints[endpoint_id]
             if rid not in endpoint.resource_ids: model.endpoints[endpoint_id]=Endpoint(endpoint.id,endpoint.method,endpoint.path,tuple(sorted(set(endpoint.resource_ids)|{rid})),endpoint.action)
     for analysis in analyses:
