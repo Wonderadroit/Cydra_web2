@@ -81,6 +81,9 @@ def wait_for_visible_with_one_reload(page, locator_factory, url: str, test: dict
             try:
                 locator_factory(fresh_page).wait_for(state="visible", timeout=8000)
             except PlaywrightTimeoutError as third_error:
+                # Preserve the live diagnostic page so the caller can capture the
+                # actual response body and screenshot instead of inspecting a closed page.
+                test["_recovery_page"] = fresh_page
                 raise AssertionError(
                     f"Control remained unavailable after bounded reload and fresh-page retry. "
                     f"Initial timeout: {first_error}; reload retry: {second_error}; fresh-page retry: {third_error}"
@@ -186,6 +189,7 @@ def main() -> int:
                     raise AssertionError("At least one checkbox did not toggle and restore as expected")
                 test1["status"] = "PASS"
             except Exception as exc:
+                page = test1.pop("_recovery_page", page)
                 test1["status"] = "FAIL"
                 test1["notes"].append(f"{type(exc).__name__}: {exc}")
                 try:
@@ -269,6 +273,7 @@ def main() -> int:
                     raise AssertionError("Add/remove counts did not return to the expected state")
                 test2["status"] = "PASS"
             except Exception as exc:
+                page = test2.pop("_recovery_page", page)
                 test2["status"] = "FAIL"
                 test2["notes"].append(f"{type(exc).__name__}: {exc}")
                 try:
