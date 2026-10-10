@@ -117,7 +117,16 @@ def main() -> int:
         # Reuse one Chromium process across viewport contexts. CI evidence shows
         # desktop checks pass, then a second Chromium launch can produce a frozen
         # renderer for every mobile check. Fresh contexts still isolate viewport state.
-        browser = p.chromium.launch(headless=True, args=["--disable-gpu", "--disable-dev-shm-usage"])
+        browser = p.chromium.launch(
+            headless=True,
+            args=[
+                "--disable-gpu",
+                "--disable-dev-shm-usage",
+                "--disable-renderer-backgrounding",
+                "--disable-backgrounding-occluded-windows",
+                "--disable-features=PaintHolding,BackForwardCache",
+            ],
+        )
         browser_version = browser.version
         for device, viewport in VIEWPORTS.items():
             context = browser.new_context(
