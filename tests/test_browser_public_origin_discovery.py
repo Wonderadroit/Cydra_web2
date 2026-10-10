@@ -15,6 +15,28 @@ def test_safe_url_parts_drops_query_and_fragment():
     assert safe_url_parts("javascript:alert(1)") is None
 
 
+def test_safe_url_parts_strips_url_credentials_before_reporting_origin():
+    assert safe_url_parts("https://user:password@api.example.test/v1/items?token=secret") == (
+        "https://api.example.test",
+        "/v1/items",
+    )
+
+
+def test_safe_url_parts_preserves_non_default_ports_and_ipv6_authority():
+    assert safe_url_parts("https://api.example.test:8443/v1/items") == (
+        "https://api.example.test:8443",
+        "/v1/items",
+    )
+    assert safe_url_parts("https://[2001:db8::1]/v1/items") == (
+        "https://[2001:db8::1]",
+        "/v1/items",
+    )
+
+
+def test_safe_url_parts_rejects_invalid_ports():
+    assert safe_url_parts("https://api.example.test:99999/v1/items") is None
+
+
 def test_api_path_match_is_narrow_and_case_insensitive():
     assert is_api_path("/v1/items")
     assert is_api_path("/graphql")

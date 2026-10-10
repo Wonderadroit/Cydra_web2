@@ -12,12 +12,23 @@ API_PATH = re.compile(r"^/(?:api(?:/|$)|graphql(?:/|$)|rpc(?:/|$)|v[0-9]+(?:/|$)
 
 
 def safe_url_parts(raw_url: str) -> tuple[str, str] | None:
-    """Return origin and path only; never persist query strings or fragments."""
-    parsed = urlsplit(raw_url)
-    if parsed.scheme.lower() not in {"http", "https"} or not parsed.hostname:
+    """Return a sanitized origin and path, excluding credentials, query, and fragment."""
+    try:
+        parsed = urlsplit(raw_url)
+        scheme = parsed.scheme.lower()
+        hostname = parsed.hostname
+        if scheme not in {"http", "https"} or not hostname:
+            return None
+        # Accessing .port validates malformed/out-of-range port values.
+        port = parsed.port
+        hostname = hostname.lower()
+        # Preserve valid IPv6 authority syntax while never retaining URL userinfo.
+        authority_host = f"[{hostname}]" if ":" in hostname else hostname
+        default_port = (scheme == "https" and port == 443) or (scheme == "http" and port == 80)
+        authority = authority_host if port is None or default_port else f"{authority_host}:{port}"
+        return f"{scheme}://{authority}", parsed.path or "/"
+    except (TypeError, ValueError):
         return None
-    origin = f"{parsed.scheme.lower()}://{parsed.netloc.lower()}"
-    return origin, parsed.path or "/"
 
 
 def is_api_path(path: str) -> bool:
