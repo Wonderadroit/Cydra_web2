@@ -180,7 +180,7 @@ def _resolve(expr, constants):
         def replace(match):
             name = match.group(1)
             return constants.get(name, match.group(0))
-        resolved = re.sub(r'\$\{([A-Za-z_$][\\w$]*)\}', replace, value)
+        resolved = re.sub(r'\$\{([A-Za-z_$][A-Za-z0-9_$]*)\}', replace, value)
         return None if "${" in resolved else resolved
 
     if len(expr)>=2 and expr[0] in "'\"\x60" and expr[-1]==expr[0]:
