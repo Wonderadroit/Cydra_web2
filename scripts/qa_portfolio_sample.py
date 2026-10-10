@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlparse
 from playwright.sync_api import sync_playwright
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from cydra_web2.qa_results import classify_exception
 
 REFERENCE_TARGET = "https://the-internet.herokuapp.com"
