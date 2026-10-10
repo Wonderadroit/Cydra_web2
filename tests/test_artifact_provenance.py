@@ -40,3 +40,12 @@ def test_unknown_owner_produces_blocked_safe_next_experiment():
     assert "cannot prove resource ownership" in experiment["blocked_reason"]
     assert "Do not claim IDOR" in experiment["safety_gate"]
     assert len(experiment["required_capabilities"]) == 2
+
+def test_empty_anonymous_model_reports_blocked_resource_state_acquisition():
+    model = TargetModel("https://authorized.example")
+    experiment, = ownership_next_experiments(model)
+    assert experiment["id"] == "acquire-authenticated-resource-state"
+    assert experiment["status"] == "blocked"
+    assert experiment["resource_id"] is None
+    assert "no authenticated identities" in experiment["blocked_reason"]
+    assert "identity-bound evidence" in experiment["safety_gate"]

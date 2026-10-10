@@ -157,3 +157,13 @@ def test_resource_candidate_extraction_excludes_ui_telemetry_and_public_media_id
     values = {(key, value, path) for doc in docs for key, value, path in _ids(doc)}
     assert ("uuid", "item-9", "items[0].uuid") in values
     assert not any(value in {"article-1", "image-1", "banner-1", "menu-1", "G-123"} for _, value, _ in values)
+
+
+def test_resource_candidate_extraction_excludes_ui_values_and_framework_envelope_hashes():
+    from cydra_web2.discovery import _documents, _ids
+
+    docs = _documents('[{"id":"40f6fbff7c4795aaf472c6d16289e727046812f380"},{"id":"page-loader"},{"id":"item-1","uuid":"uuid-1"}]')
+    values = {(key, value, path) for doc in docs for key, value, path in _ids(doc)}
+    assert not any(value in {"40f6fbff7c4795aaf472c6d16289e727046812f380", "page-loader"} for _, value, _ in values)
+    assert ("id", "item-1", "[2].id") in values
+    assert ("uuid", "uuid-1", "[2].uuid") in values
