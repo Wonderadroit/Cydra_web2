@@ -345,7 +345,7 @@ def _bootstrap() -> None:
                 try:
                     response = page.goto(url, wait_until="domcontentloaded", timeout=30000)
                     body = page.locator("body").inner_text(timeout=5000)
-                    normalized = re.sub(r"\s+", " ", body).strip().lower()
+                    normalized = normalize_visible_text(body)
                     fingerprint = __import__("hashlib").sha256(normalized.encode()).hexdigest() if normalized else ""
                     baseline = anonymous_checks.get(path, {})
                     route_checks.append({"path": path, "status": response.status if response else None, "final_url": page.url, "login_surface": _login_surface(body), "title": page.title(), "body_fingerprint": fingerprint, "anonymous_baseline": baseline, "differs_from_anonymous": bool(baseline.get("status") != (response.status if response else None) or baseline.get("final_url") != page.url or baseline.get("title") != page.title() or baseline.get("body_fingerprint") != fingerprint)})
