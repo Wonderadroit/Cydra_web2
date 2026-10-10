@@ -72,6 +72,7 @@ def classify_differential(experiment, owner_response, comparison_response, resou
         **common_data,
         "owner_resource_marker_found": owner_marker,
         "comparison_resource_marker_found": comparison_marker,
+        "resource_marker_found": comparison_marker,  # Backward-compatible input for replay impact assessment.
         "response_fingerprints_equal": owner_response.body_sha256 == comparison_response.body_sha256,
     }
     if owner_success and comparison_success and owner_marker and comparison_marker:
