@@ -273,5 +273,5 @@ def test_resource_acquisition_accepts_successful_json_with_provenance():
     resource = model.resources[result.resource_ids[0]]
     assert resource.identifier == "real-candidate"
     assert resource.source_observation == model.observations[0].id
-    assert resource.source_field_path == "items[0].uuid"
+    assert resource.source_field_path == "[0].items[0].uuid"
     assert resource.owner_id is None
