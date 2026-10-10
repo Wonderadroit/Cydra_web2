@@ -83,11 +83,16 @@ def run_read_only_bola_probe(
     elif not owner_baseline_valid:
         status = "inconclusive"
         rationale = "The owner identity did not consistently demonstrate the known resource marker; comparison is not interpretable."
-    elif all(not item["comparison_resource_marker_found"] for item in observations):
+    elif all(
+        not item["comparison_resource_marker_found"]
+        and (item["comparison_status"] in {401, 403, 404})
+        for item in observations
+    ):
         status = "no_cross_identity_disclosure_observed"
         rationale = (
-            "The comparison identity did not receive the known resource marker in these read-only trials. "
-            "This does not prove the application is secure or exclude other authorization flaws."
+            "The comparison identity received an authorization-style denial or not-found response and did not receive "
+            "the known resource marker in these read-only trials. This does not prove the application is secure or "
+            "exclude other authorization flaws."
         )
     else:
         status = "inconclusive"
