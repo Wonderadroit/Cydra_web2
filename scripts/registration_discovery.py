@@ -12,7 +12,6 @@ import re
 from pathlib import Path
 from urllib.parse import urljoin, urlparse
 
-from playwright.sync_api import sync_playwright
 
 
 REGISTER_WORDS = re.compile(r"register|sign[ -]?up|create account|join now|new account", re.I)
@@ -23,6 +22,10 @@ def discover(base_url: str, output: Path) -> dict:
     parsed = urlparse(base_url)
     if parsed.scheme != "https" or not parsed.netloc:
         raise ValueError("target URL must be an absolute HTTPS URL")
+    # Keep module import and non-browser guard tests usable in minimal CI jobs.
+    # The browser dependency is required only after the target passes validation.
+    from playwright.sync_api import sync_playwright
+
     origin = f"{parsed.scheme}://{parsed.netloc}"
     report = {"target_origin": origin, "visited": [], "registration_candidates": [], "forms": [], "blocked_external_links": []}
     queue = [base_url]
