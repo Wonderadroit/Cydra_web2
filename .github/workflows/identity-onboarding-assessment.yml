@@ -45,8 +45,8 @@ jobs:
           python -m playwright install --with-deps chromium
       - name: Discover authentication options (read-only)
         env:
-          CYDRA_TARGET_URL: ${{ inputs.target_url }}
-          CYDRA_AUTH_URL: ${{ inputs.auth_url }}
+          CYDRA_TARGET_URL: ${{ inputs.target_url || 'https://app.aurory.io' }}
+          CYDRA_AUTH_URL: ${{ inputs.auth_url || 'https://app.aurory.io' }}
         run: python scripts/identity_provisioning_assessment.py
       - name: Upload assessment report
         if: always()
