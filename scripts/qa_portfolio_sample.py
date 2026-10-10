@@ -104,6 +104,7 @@ def main() -> int:
             # fails DNS resolution and correlates with a renderer that never exposes
             # the document. Isolate only this third-party analytics endpoint; tested
             # page assets and application requests remain unmodified.
+            context.route("https://the-internet.herokuapp.com/js/vendor/298279967.js", lambda route: route.abort())
             context.route("https://298279967.log.optimizely.com/**", lambda route: route.abort())
             page = context.new_page()
             page.set_default_timeout(15000)
