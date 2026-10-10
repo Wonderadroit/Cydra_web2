@@ -119,13 +119,38 @@ def _documents(body: str):
             unique.append(doc)
     return unique
 def _ids(value, path=''):
-    if isinstance(value,dict):
-        for k,v in value.items():
-            p=f'{path}.{k}' if path else str(k)
-            if _ID.fullmatch(str(k)) and isinstance(v,(str,int)) and str(v).strip(): yield str(k),str(v),p
-            yield from _ids(v,p)
-    elif isinstance(value,list):
-        for i,v in enumerate(value): yield from _ids(v,f'{path}[{i}]')
+    """Extract identifier candidates while excluding obvious UI/static-content IDs.
+
+    The path is retained as provenance. IDs under presentation, telemetry, and
+    public editorial-media contexts are not useful ownership candidates, so they
+    are excluded before resource modeling rather than generating noisy hypotheses.
+    """
+    non_resource_contexts = {
+        "children", "loading", "thumbnail", "thumbnails", "banner", "banners",
+        "navigation", "navigationmenu", "consent", "consentdefault",
+        "pageloader", "loader", "gaid", "analytics", "tracking",
+        "topnews", "news", "articles", "blogposts", "announcements",
+        "pressreleases",
+    }
+    if isinstance(value, dict):
+        for k, v in value.items():
+            p = f'{path}.{k}' if path else str(k)
+            segments = re.findall(r'[A-Za-z][A-Za-z0-9_-]*', p.lower())
+            excluded_context = any(
+                segment.replace('-', '') in non_resource_contexts
+                for segment in segments
+            )
+            excluded_key = str(k).lower().replace('_', '').replace('-', '') in {
+                "gaid", "analyticsid", "trackingid",
+            }
+            if (not excluded_context and not excluded_key
+                    and _ID.fullmatch(str(k)) and isinstance(v, (str, int))
+                    and str(v).strip()):
+                yield str(k), str(v), p
+            yield from _ids(v, p)
+    elif isinstance(value, list):
+        for i, v in enumerate(value):
+            yield from _ids(v, f'{path}[{i}]')
 
 def _resolve(expr, constants):
     expr=expr.strip().strip('()')
