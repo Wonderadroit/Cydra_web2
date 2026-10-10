@@ -5,6 +5,11 @@ from typing import Any,Mapping
 from .scope import check_scope
 from .session import IdentityBinding,SessionRegistry
 
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    """Do not follow redirects while identity-bound headers may be present."""
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
 @dataclass(frozen=True)
 class TargetConfig:
     base_url:str
@@ -54,7 +59,9 @@ class HttpAdapter:
         if not decision.allowed:
             raise PermissionError(decision.reason)
         jar=self._jars.setdefault(identity_id or "__anonymous__",CookieJar())
-        opener=urllib.request.build_opener(urllib.request.HTTPCookieProcessor(jar))
+        # Never follow redirects automatically: urllib can otherwise forward
+        # caller-supplied identity headers before a post-redirect scope check.
+        opener=urllib.request.build_opener(_NoRedirect(),urllib.request.HTTPCookieProcessor(jar))
         merged={"User-Agent":"CYDRA-Web2/0.1"}
         if identity_id is not None: merged.update(binding.headers)
         merged.update(headers or {})
