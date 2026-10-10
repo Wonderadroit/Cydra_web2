@@ -122,7 +122,7 @@ def main() -> int:
             # had renderer stalls on all four checks; retain this narrow script route
             # alongside the known telemetry endpoint route. Application assets and
             # tested page requests remain unmodified.
-            context.route("https://the-internet.herokuapp.com/js/vendor/298279967.js", lambda route: route.abort())
+            context.route("https://the-internet.herokuapp.com/js/vendor/298279967.js", lambda route: route.fulfill(status=200, content_type="application/javascript", body=""))
             context.route("https://298279967.log.optimizely.com/**", lambda route: route.abort())
             page = context.new_page()
             page.set_default_timeout(15000)
@@ -321,7 +321,7 @@ def main() -> int:
             "browser_version": browser_version,
             "viewports": VIEWPORTS,
             "mobile_note": "Mobile coverage is a 390x844 narrow viewport only; touch interaction and physical-device behavior are not certified.",
-            "test_harness_adjustments": ["The legacy Optimizely analytics script and telemetry endpoint are isolated after repeated CI runs showed renderer stalls when the script was allowed; tested application requests are not intercepted."],
+            "test_harness_adjustments": ["The legacy Optimizely analytics script is replaced with an empty successful JavaScript response, and its telemetry endpoint is blocked, to isolate third-party analytics without surfacing an intentional failed-script request; tested application requests are not intercepted."],
         },
         "summary": {"total": len(results), "passed": passed, "failed": failed},
         "tests": results,
