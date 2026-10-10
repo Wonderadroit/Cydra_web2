@@ -1,6 +1,13 @@
 name: Web2 identity onboarding assessment
 
 on:
+  push:
+    branches:
+      - "feat/identity-lifecycle-and-browser-origin-safety"
+    paths:
+      - ".github/workflows/identity-onboarding-assessment.yml"
+      - "scripts/identity_provisioning_assessment.py"
+      - "src/cydra_web2/identity_provisioning.py"
   pull_request:
     paths:
       - ".github/workflows/identity-onboarding-assessment.yml"
