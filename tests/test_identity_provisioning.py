@@ -7,7 +7,8 @@ def test_classifies_oauth_wallet_and_registration_without_claiming_account_creat
         {"label": "Connect Wallet", "href": "#wallet"},
         {"label": "Create account with email", "href": "/register"},
     ], "https://app.example.test")
-    assert result["methods"] == ["email", "google", "wallet"]
+    assert result["methods"] == ["email", "google", "registration", "wallet"]
+    assert result["registration_surface_detected"] is True
     assert result["next_action"] == "operator_sign_in_required"
     assert result["autonomous_account_creation_supported"] is False
 
