@@ -277,14 +277,15 @@ def test_resource_acquisition_accepts_successful_json_with_provenance():
     assert resource.owner_id is None
 
 
-def test_js_reconstruction_resolves_static_template_literals_but_not_interpolation():
+def test_js_reconstruction_resolves_static_template_literals_but_not_unknown_interpolation():
     from cydra_web2.discovery import _analyze_bundle
 
     analysis = _analyze_bundle(
         "/app.js",
-        'const base = `/v1`; fetch(`${base}/items`); axios.get(`/v1/me`);',
+        'const base = `/v1`; fetch(`${base}/items`); axios.get(`/v1/me`); fetch(`${runtimeBase}/private`);',
         "https://authorized.example",
     )
     assert ("GET", "/v1/me") in analysis.endpoints
-    assert not any(path == "/v1/items" for _, path in analysis.endpoints)
-    assert "`${base}/items`" in analysis.unresolved
+    assert ("GET", "/v1/items") in analysis.endpoints
+    assert "`${runtimeBase}/private`" in analysis.unresolved
+    assert not any(path == "/private" for _, path in analysis.endpoints)
