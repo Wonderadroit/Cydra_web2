@@ -38,7 +38,7 @@ jobs:
       CYDRA_TARGET_URL: ${{ inputs.target_url || 'https://app.aurory.io' }}
       CYDRA_DISCOVERY_SEEDS: ${{ inputs.discovery_seeds }}
       CYDRA_MAX_PATHS: ${{ inputs.max_paths || '250' }}
-      CYDRA_SHARED_HEADERS: '{"X-Bug-Bounty":"Bugcrowd-cyberwonder"}'
+      CYDRA_SHARED_HEADERS: '{"X-Bug-Bounty":"cyberwonder"}'
     steps:
       - uses: actions/checkout@v4
 

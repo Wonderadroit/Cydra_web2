@@ -58,7 +58,7 @@ jobs:
       CYDRA_AUTH_URL: ${{ inputs.auth_url }}
       CYDRA_AUTH_VERIFY_PATHS: ${{ inputs.verification_paths }}
       CYDRA_AUTH_IDENTITY: ${{ inputs.identity_id }}
-      CYDRA_BUG_BOUNTY_HEADER: "Bugcrowd-cyberwonder"
+      CYDRA_BUG_BOUNTY_HEADER: "cyberwonder"
       CYDRA_CHROME_BINARY: "/usr/bin/google-chrome"
     steps:
       - uses: actions/checkout@v4

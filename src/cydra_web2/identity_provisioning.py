@@ -8,6 +8,11 @@ from __future__ import annotations
 import re
 from urllib.parse import urljoin, urlsplit
 
+def normalize_visible_text(text: str) -> str:
+    """Normalize rendered text consistently before comparing page fingerprints."""
+    return re.sub(r"\s+", " ", (text or "")).strip().lower()
+
+
 PROVIDERS = {
     "google": ("google",),
     "discord": ("discord",),
