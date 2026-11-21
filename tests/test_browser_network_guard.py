@@ -6,7 +6,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import pytest
 
 playwright = pytest.importorskip("playwright.sync_api")
-from playwright.sync_api import sync_playwright
+from playwright.sync_api import Error as PlaywrightError, sync_playwright
 
 from cydra_web2.browser_safety import browser_request_allowed, safe_observed_url
 
@@ -17,6 +17,11 @@ class _Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         type(self).requests_seen.append(("GET", self.path))
+        if self.path == "/redirect":
+            self.send_response(302)
+            self.send_header("Location", f"http://127.0.0.1:{type(self).second_port}/redirected")
+            self.end_headers()
+            return
         if self.path == "/":
             body = b"""<!doctype html><script>
             fetch('/mutate', {method: 'POST'}).catch(() => {});
@@ -52,7 +57,6 @@ def test_playwright_context_blocks_mutations_and_cross_origin_before_send():
     second_thread.start()
     _Handler.second_port = second.server_port
     target = f"http://127.0.0.1:{first.server_port}"
-    external = f"http://127.0.0.1:{second.server_port}"
     try:
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=True)
@@ -74,9 +78,11 @@ def test_playwright_context_blocks_mutations_and_cross_origin_before_send():
             page = context.new_page()
             page.goto(target, wait_until="domcontentloaded")
             page.wait_for_timeout(300)
+            with pytest.raises(PlaywrightError):
+                page.goto(target + "/redirect", wait_until="domcontentloaded")
             assert ("GET", "/") in _Handler.requests_seen
             assert ("POST", "/mutate") not in _Handler.requests_seen
-            assert not any(path == "/cross-origin" for method, path in _Handler.requests_seen)
+            assert not any(path in {"/cross-origin", "/redirected"} for method, path in _Handler.requests_seen)
             assert blocked["mutating"] >= 1
             assert blocked["cross_origin"] >= 1
             context.close()
