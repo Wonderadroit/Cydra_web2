@@ -6,7 +6,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import pytest
 
 playwright = pytest.importorskip("playwright.sync_api")
-from playwright.sync_api import sync_playwright
+from playwright.sync_api import Error as PlaywrightError, sync_playwright
 
 from cydra_web2.browser_safety import browser_request_allowed, safe_observed_url
 
@@ -104,7 +104,8 @@ def test_playwright_context_blocks_mutations_and_cross_origin_before_send():
             page.wait_for_timeout(300)
             page.evaluate("""() => { const ws = new WebSocket(`ws://${location.host}/socket`); window.wsState = ws.readyState; }""")
             page.wait_for_timeout(100)
-            page.goto(target + "/redirect", wait_until="domcontentloaded")
+            with pytest.raises(PlaywrightError, match="ERR_BLOCKED_BY_CLIENT"):
+                page.goto(target + "/redirect", wait_until="domcontentloaded")
             assert ("GET", "/") in _Handler.requests_seen
             assert ("HEAD", "/head") in _Handler.requests_seen
             assert not any(method in {"POST", "PUT", "PATCH", "DELETE"} for method, _ in _Handler.requests_seen)
