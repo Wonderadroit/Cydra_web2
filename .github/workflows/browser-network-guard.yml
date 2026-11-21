@@ -1,0 +1,27 @@
+name: Browser network guard integration
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  browser-network-guard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install browser test dependencies
+        run: python -m pip install -e ".[test,browser]"
+      - name: Install Chromium
+        run: python -m playwright install --with-deps chromium
+      - name: Verify browser request interception against local servers
+        env:
+          PYTHONPATH: src
+        run: python -m pytest -q -m browser tests/test_browser_network_guard.py

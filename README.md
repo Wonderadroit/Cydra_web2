@@ -8,7 +8,7 @@ Initial frontier: horizontal authorization, function-level authorization, workfl
 
 This repository is intentionally independent from the Solidity research system.
 
-Execution is allowlisted by target configuration. Redirects stay inside the allowlist. Credentials are operator-supplied. Transport/capability failures are never security evidence.
+Execution is allowlisted by target configuration. The browser-backed observer permits only same-origin GET/HEAD traffic, blocks all HTTP redirects before contacting their destinations, disables service workers, and denies WebSockets. Credentials are operator-supplied. Transport/capability failures are never security evidence. This strict browser policy can interrupt applications that depend on redirects or WebSockets; it fails closed rather than following them.
 
 Research loop:
 

@@ -1,5 +1,8 @@
-"""Safe browser observation helpers. Never trust URL string prefixes as origins."""
+"""Safe browser observation and request-policy helpers."""
 from urllib.parse import urlsplit, urlunsplit
+
+
+READ_ONLY_METHODS = frozenset({"GET", "HEAD"})
 
 
 def same_origin(candidate: str, target: str) -> bool:
@@ -31,3 +34,8 @@ def safe_observed_url(candidate: str, target: str) -> str | None:
         return urlunsplit((parsed.scheme.lower(), urlsplit(target).netloc, path, "", ""))
     except (ValueError, TypeError):
         return None
+
+
+def browser_request_allowed(url: str, method: str, target: str) -> bool:
+    """Fail closed: browser traffic must stay same-origin and use GET or HEAD."""
+    return same_origin(url, target) and method.upper() in READ_ONLY_METHODS

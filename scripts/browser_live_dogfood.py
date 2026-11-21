@@ -2,12 +2,12 @@ from __future__ import annotations
 import base64, json, os
 from pathlib import Path
 
-from playwright.sync_api import sync_playwright
+from playwright.sync_api import Error as PlaywrightError, sync_playwright
 
 from cydra_web2.adapter import HttpAdapter, IdentitySession
 from cydra_web2.discovery import discover
 from cydra_web2.live_config import LiveDogfoodConfig
-from cydra_web2.browser_safety import safe_observed_url
+from cydra_web2.browser_safety import browser_request_allowed, safe_observed_url
 
 
 def _states():
@@ -46,56 +46,97 @@ def main():
     browser_observations=[]
     with sync_playwright() as p:
         browser=p.chromium.launch(headless=True)
-        for identity in config.identities:
-            context=browser.new_context(storage_state=states[identity.identity_id])
-            page=context.new_page()
-            network=[]
-            auth_headers={}
-            def on_request(request):
-                # Exact origin comparison prevents lookalike hosts from contaminating
-                # target observations. Query strings and URL userinfo are never persisted.
-                safe_url = safe_observed_url(request.url, config.target.base_url)
-                if safe_url is None:
-                    return
-                network.append({
-                    "url": safe_url,
-                    "method": request.method,
+        try:
+            for identity in config.identities:
+            # Block service workers so page traffic cannot bypass context routing.
+                context=browser.new_context(
+                    storage_state=states[identity.identity_id],
+                    service_workers="block",
+                )
+                page=context.new_page()
+                network=[]
+                auth_headers={}
+                blocked_cross_origin=0
+                blocked_mutating=0
+                blocked_redirects=0
+                def guard_request(route):
+                    nonlocal blocked_cross_origin, blocked_mutating, blocked_redirects
+                    request=route.request
+                    if not browser_request_allowed(request.url, request.method, config.target.base_url):
+                        if safe_observed_url(request.url, config.target.base_url) is None:
+                            blocked_cross_origin += 1
+                        else:
+                            blocked_mutating += 1
+                        route.abort("blockedbyclient")
+                        return
+                    # route.continue_() lets Chromium follow redirects without another
+                    # interception callback. Fetch exactly one response and fail closed
+                    # on every 3xx before any Location target can be contacted.
+                    response=route.fetch(max_redirects=0)
+                    if 300 <= response.status < 400:
+                        blocked_redirects += 1
+                        route.abort("blockedbyclient")
+                        return
+                    route.fulfill(response=response)
+                # Context-wide interception covers browser requests; redirects are
+                # stopped at their first 3xx response before a destination is contacted.
+                context.route("**/*", guard_request)
+                # WebSockets are denied: they are not needed for bounded GET/HEAD discovery.
+                context.route_web_socket("**/*", lambda websocket: websocket.close(
+                    code=1008, reason="CYDRA read-only browser policy"
+                ))
+                def on_request(request):
+                    safe_url = safe_observed_url(request.url, config.target.base_url)
+                    if safe_url is None:
+                        return
+                    network.append({"url": safe_url, "method": request.method})
+                    for name, value in request.headers.items():
+                        lname = name.lower()
+                        if lname == "authorization" or lname.startswith("x-"):
+                            auth_headers.setdefault(name, value)
+                page.on("request", on_request)
+                try:
+                    page.goto(config.target.base_url, wait_until="domcontentloaded")
+                except PlaywrightError as exc:
+                    raise RuntimeError(
+                        "Browser navigation was blocked or failed under the same-origin read-only policy; "
+                        "no cross-origin fallback is permitted."
+                    ) from exc
+                page.wait_for_timeout(2000)
+                observed_paths={"/"}
+                target_host=__import__("urllib.parse",fromlist=["urlparse"]).urlparse(config.target.base_url).hostname
+                for item in network:
+                    parsed=__import__("urllib.parse",fromlist=["urlparse"]).urlparse(item["url"])
+                    if parsed.hostname==target_host:
+                        observed_paths.add(parsed.path or "/")
+                browser_observations.append({
+                    "identity":identity.identity_id,
+                    "final_url": safe_observed_url(page.url, config.target.base_url) or "external_or_cross_origin",
+                    "title":page.title(),
+                    "network_requests":network[:200],
+                    "observed_paths":sorted(observed_paths)[:250],
+                    "cookie_count":len(context.cookies()),
+                    "browser_auth_header_names":sorted(auth_headers),
+                    "blocked_cross_origin_requests":blocked_cross_origin,
+                    "blocked_mutating_requests":blocked_mutating,
+                    "blocked_redirects":blocked_redirects,
+                    "websockets_blocked":True,
                 })
-                for name, value in request.headers.items():
-                    lname = name.lower()
-                    if lname == "authorization" or lname.startswith("x-"):
-                        auth_headers.setdefault(name, value)
-            page.on("request", on_request)
-            page.goto(config.target.base_url, wait_until="domcontentloaded")
-            page.wait_for_timeout(2000)
-            observed_paths={"/"}
-            target_host=__import__("urllib.parse",fromlist=["urlparse"]).urlparse(config.target.base_url).hostname
-            for item in network:
-                parsed=__import__("urllib.parse",fromlist=["urlparse"]).urlparse(item["url"])
-                if parsed.hostname==target_host:
-                    observed_paths.add(parsed.path or "/")
-            browser_observations.append({
-                "identity":identity.identity_id,
-                "final_url": safe_observed_url(page.url, config.target.base_url) or "external_or_cross_origin",
-                "title":page.title(),
-                "network_requests":[x for x in network if x["method"] in {"GET","POST","PUT","PATCH","DELETE"}][:200],
-                "observed_paths":sorted(observed_paths)[:250],
-                "cookie_count":len(context.cookies()),
-                "browser_auth_header_names":sorted(auth_headers),
-            })
-            cookies=context.cookies()
-            cookie_header="; ".join(
-                f"{c['name']}={c['value']}"
-                for c in cookies
-                if _cookie_applies(c["domain"], config.target.allowed_hosts)
-            )
-            headers=dict(auth_headers)
-            headers.update(identity.headers)
-            if cookie_header:
-                headers["Cookie"]=cookie_header
-            identities.append(IdentitySession(identity.identity_id,headers))
-            context.close()
-        browser.close()
+                cookies=context.cookies()
+                cookie_header="; ".join(
+                    f"{c['name']}={c['value']}"
+                    for c in cookies
+                    if _cookie_applies(c["domain"], config.target.allowed_hosts)
+                )
+                headers=dict(auth_headers)
+                headers.update(identity.headers)
+                if cookie_header:
+                    headers["Cookie"]=cookie_header
+                identities.append(IdentitySession(identity.identity_id,headers))
+                context.close()
+    
+        finally:
+            browser.close()
 
     adapter=HttpAdapter(config.target,tuple(identities))
     from cydra_web2.model import Identity,TargetModel
@@ -116,7 +157,7 @@ def main():
         "http_observations":len(observations),
         "endpoints":sorted(model.endpoints),
         "resources":sorted(model.resources),
-        "note":"Browser session material is never written to the artifact; authorization findings require causal evidence.",
+        "note":"Browser session material is never written to the artifact; browser traffic is same-origin GET/HEAD only, all HTTP redirects are blocked, WebSockets are blocked, and authorization findings require causal evidence.",
     }
     out=Path(os.environ.get("CYDRA_ARTIFACT","artifacts/live-browser-dogfood.json"))
     out.parent.mkdir(parents=True,exist_ok=True)
