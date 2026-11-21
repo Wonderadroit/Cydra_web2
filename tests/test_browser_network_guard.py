@@ -74,7 +74,7 @@ def test_playwright_context_blocks_mutations_and_cross_origin_before_send():
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=True)
             context = browser.new_context(service_workers="block")
-            blocked = {"cross_origin": 0, "mutating": 0}
+            blocked = {"cross_origin": 0, "mutating": 0, "websocket": 0}
 
             def guard(route):
                 request = route.request
@@ -88,9 +88,17 @@ def test_playwright_context_blocks_mutations_and_cross_origin_before_send():
                 route.continue_()
 
             context.route("**/*", guard)
+
+            def deny_websocket(websocket):
+                blocked["websocket"] += 1
+                websocket.close(code=1008, reason="test policy")
+
+            context.route_web_socket("**/*", deny_websocket)
             page = context.new_page()
             page.goto(target, wait_until="domcontentloaded")
             page.wait_for_timeout(300)
+            page.evaluate("""() => { const ws = new WebSocket(`ws://${location.host}/socket`); window.wsState = ws.readyState; }""")
+            page.wait_for_timeout(100)
             with pytest.raises(PlaywrightError):
                 page.goto(target + "/redirect", wait_until="domcontentloaded")
             assert ("GET", "/") in _Handler.requests_seen
@@ -99,6 +107,7 @@ def test_playwright_context_blocks_mutations_and_cross_origin_before_send():
             assert not any(path in {"/cross-origin", "/redirected"} for method, path in _Handler.requests_seen)
             assert blocked["mutating"] >= 4
             assert blocked["cross_origin"] >= 1
+            assert blocked["websocket"] >= 1
             context.close()
             browser.close()
     finally:
