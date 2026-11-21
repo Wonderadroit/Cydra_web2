@@ -6,7 +6,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import pytest
 
 playwright = pytest.importorskip("playwright.sync_api")
-from playwright.sync_api import Error as PlaywrightError, sync_playwright
+from playwright.sync_api import sync_playwright
 
 from cydra_web2.browser_safety import browser_request_allowed, safe_observed_url
 
@@ -74,7 +74,7 @@ def test_playwright_context_blocks_mutations_and_cross_origin_before_send():
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=True)
             context = browser.new_context(service_workers="block")
-            blocked = {"cross_origin": 0, "mutating": 0, "websocket": 0}
+            blocked = {"cross_origin": 0, "mutating": 0, "websocket": 0, "redirect": 0}
 
             def guard(route):
                 request = route.request
@@ -85,7 +85,12 @@ def test_playwright_context_blocks_mutations_and_cross_origin_before_send():
                         blocked["mutating"] += 1
                     route.abort("blockedbyclient")
                     return
-                route.continue_()
+                response = route.fetch(max_redirects=0)
+                if 300 <= response.status < 400:
+                    blocked["redirect"] += 1
+                    route.abort("blockedbyclient")
+                    return
+                route.fulfill(response=response)
 
             context.route("**/*", guard)
 
@@ -105,7 +110,8 @@ def test_playwright_context_blocks_mutations_and_cross_origin_before_send():
             assert not any(method in {"POST", "PUT", "PATCH", "DELETE"} for method, _ in _Handler.requests_seen)
             assert not any(path in {"/cross-origin", "/redirected"} for method, path in _Handler.requests_seen), _Handler.requests_seen
             assert blocked["mutating"] >= 4
-            assert blocked["cross_origin"] >= 2
+            assert blocked["cross_origin"] >= 1
+            assert blocked["redirect"] >= 1
             assert blocked["websocket"] >= 1
             context.close()
             browser.close()
