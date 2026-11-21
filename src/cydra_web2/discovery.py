@@ -138,7 +138,9 @@ def _ids(value, path=''):
         "navigation", "navigationmenu", "consent", "consentdefault",
         "pageloader", "loader", "gaid", "analytics", "tracking",
         "topnews", "news", "articles", "blogposts", "announcements",
-        "pressreleases",
+        "pressreleases", "docs", "documentation", "examples", "example",
+        "samples", "sampledata", "fixtures", "fixture", "mock", "mockdata",
+        "tutorial", "tutorials", "storybook", "demo", "demos",
     }
     if isinstance(value, dict):
         for k, v in value.items():
