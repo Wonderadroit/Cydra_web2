@@ -103,7 +103,7 @@ def test_playwright_context_blocks_mutations_and_cross_origin_before_send():
             assert ("GET", "/") in _Handler.requests_seen
             assert ("HEAD", "/head") in _Handler.requests_seen
             assert not any(method in {"POST", "PUT", "PATCH", "DELETE"} for method, _ in _Handler.requests_seen)
-            assert not any(path in {"/cross-origin", "/redirected"} for method, path in _Handler.requests_seen)
+            assert not any(path in {"/cross-origin", "/redirected"} for method, path in _Handler.requests_seen), _Handler.requests_seen
             assert blocked["mutating"] >= 4
             assert blocked["cross_origin"] >= 2
             assert blocked["websocket"] >= 1
