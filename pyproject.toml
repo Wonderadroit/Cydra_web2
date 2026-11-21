@@ -12,3 +12,4 @@ report = ["reportlab>=4.2"]
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]
+markers = ["browser: requires Playwright and a local Chromium installation"]
