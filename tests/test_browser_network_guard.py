@@ -24,7 +24,10 @@ class _Handler(BaseHTTPRequestHandler):
             return
         if self.path == "/":
             body = b"""<!doctype html><script>
-            fetch('/mutate', {method: 'POST'}).catch(() => {});
+            fetch('/head', {method: 'HEAD'}).catch(() => {});
+            for (const method of ['POST', 'PUT', 'PATCH', 'DELETE']) {
+              fetch('/mutate-' + method.toLowerCase(), {method}).catch(() => {});
+            }
             fetch('http://127.0.0.1:PORT/cross-origin', {mode: 'no-cors'}).catch(() => {});
             </script><p>local guard test</p>""".replace(b"PORT", str(type(self).second_port).encode())
             self.send_response(200)
@@ -37,10 +40,20 @@ class _Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(b"ok")
 
-    def do_POST(self):
-        type(self).requests_seen.append(("POST", self.path))
+    def do_HEAD(self):
+        type(self).requests_seen.append(("HEAD", self.path))
         self.send_response(200)
         self.end_headers()
+
+    def _record_mutation(self):
+        type(self).requests_seen.append((self.command, self.path))
+        self.send_response(200)
+        self.end_headers()
+
+    do_POST = _record_mutation
+    do_PUT = _record_mutation
+    do_PATCH = _record_mutation
+    do_DELETE = _record_mutation
 
     def log_message(self, *_args):
         pass
@@ -81,9 +94,10 @@ def test_playwright_context_blocks_mutations_and_cross_origin_before_send():
             with pytest.raises(PlaywrightError):
                 page.goto(target + "/redirect", wait_until="domcontentloaded")
             assert ("GET", "/") in _Handler.requests_seen
-            assert ("POST", "/mutate") not in _Handler.requests_seen
+            assert ("HEAD", "/head") in _Handler.requests_seen
+            assert not any(method in {"POST", "PUT", "PATCH", "DELETE"} for method, _ in _Handler.requests_seen)
             assert not any(path in {"/cross-origin", "/redirected"} for method, path in _Handler.requests_seen)
-            assert blocked["mutating"] >= 1
+            assert blocked["mutating"] >= 4
             assert blocked["cross_origin"] >= 1
             context.close()
             browser.close()
