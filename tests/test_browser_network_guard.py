@@ -12,6 +12,7 @@ from cydra_web2.browser_safety import browser_request_allowed, safe_observed_url
 
 
 class _Handler(BaseHTTPRequestHandler):
+    second_port = 0
     requests_seen: list[tuple[str, str]] = []
 
     def do_GET(self):
@@ -20,7 +21,7 @@ class _Handler(BaseHTTPRequestHandler):
             body = b"""<!doctype html><script>
             fetch('/mutate', {method: 'POST'}).catch(() => {});
             fetch('http://127.0.0.1:PORT/cross-origin', {mode: 'no-cors'}).catch(() => {});
-            </script><p>local guard test</p>"""
+            </script><p>local guard test</p>""".replace(b"PORT", str(type(self).second_port).encode())
             self.send_response(200)
             self.send_header("Content-Type", "text/html")
             self.send_header("Content-Length", str(len(body)))
@@ -49,6 +50,7 @@ def test_playwright_context_blocks_mutations_and_cross_origin_before_send():
     second_thread = threading.Thread(target=second.serve_forever, daemon=True)
     first_thread.start()
     second_thread.start()
+    _Handler.second_port = second.server_port
     target = f"http://127.0.0.1:{first.server_port}"
     external = f"http://127.0.0.1:{second.server_port}"
     try:
